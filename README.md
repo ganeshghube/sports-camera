@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Cricket Live — Scoring + Streaming + AI Ball Tracking
 
 This is the existing Cricket Live application updated for a clean Windows/Git Bash and Raspberry Pi workflow.
@@ -360,6 +359,3 @@ YouTube realtime profile:
 - High quality: 1080p60, 17 Mbps, Low latency.
 
 YouTube documents Ultra Low latency as normally under 5 seconds for most viewers, while network congestion and player buffering can add delay. 4K cannot use Ultra Low or Low latency. Test with the same movement/audio conditions as the real match.
-=======
-# sports-camera
->>>>>>> 92e8e3d2d06c8ef7dfcd11c2aa92445ff3cfe538
