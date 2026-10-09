@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live Preview — Cricket Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Barlow+Condensed:wght@700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<style>
+.preview-stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;min-height:300px;box-shadow:0 12px 30px rgba(0,0,0,.2)}
+.preview-stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.preview-stage canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.preview-stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none;background:transparent}
+.preview-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#aab7c4;font-size:18px;font-weight:700}
+.preview-hud{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;z-index:5;pointer-events:none}
+.hud-pill{background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.15);color:#fff;padding:7px 11px;border-radius:999px;font:700 12px Inter;backdrop-filter:blur(6px)}
+.hud-pill.live{background:#b91c1c}.hud-pill.good{background:#166534}.hud-pill.warn{background:#92400e}
+.control-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.big-control{min-height:54px;font-size:17px;font-weight:800}
+.big-control.running{background:#c41e3a!important;border-color:#c41e3a!important;color:#fff!important}
+.big-control.paused{background:#d97706!important;border-color:#d97706!important;color:#fff!important}
+.status-card{display:grid;gap:8px}.status-line{display:flex;justify-content:space-between;gap:12px;align-items:center;font-weight:700}.status-line span:first-child{color:var(--muted);font-size:12px}
+@media(max-width:1000px){.control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.control-grid{grid-template-columns:1fr}.preview-hud{left:7px;top:7px}.hud-pill{padding:6px 9px;font-size:11px}}
+</style>
+</head>
+<body>
+<div id="page">
+<section class="cl-card">
+ <div class="hd">Live Preview <span class="hint" style="margin-left:auto">ONE CAMERA • TRACK • RECORD • STREAM</span></div>
+ <div class="bd">
+  <div class="preview-stage" id="stage">
+   <img id="cameraFrame" alt="Live camera preview">
+   <canvas id="trackCanvas"></canvas>
+   <iframe id="scoreOverlay" src="index.html?overlay=1" title="Score overlay"></iframe>
+   <div class="preview-hud">
+    <span class="hud-pill" id="camHud">CAMERA: STOPPED</span>
+    <span class="hud-pill" id="trackHud">TRACKING: OFF</span>
+    <span class="hud-pill" id="ballHud">BALL: —</span>
+    <span class="hud-pill" id="streamHud">YOUTUBE: OFF</span>
+   </div>
+   <div class="preview-empty" id="empty">Press <b>Start Camera</b> to see the live picture.</div>
+  </div>
+
+  <div class="control-grid" style="margin-top:12px">
+   <button class="btn primary big-control" id="cameraBtn">▶ Start Camera</button>
+   <button class="btn big-control" id="trackingBtn" disabled>🎯 Start Tracking</button>
+   <button class="btn primary big-control" id="recordBtn">⏺ Start Recording</button>
+   <button class="btn primary big-control" id="youtubeBtn">▶ Start YouTube</button>
+  </div>
+  <div class="row" style="margin-top:10px">
+   <button class="btn" id="pauseBtn" disabled>⏸ Pause Recording</button>
+   <button class="btn" id="overlayBtn">👁 Score Overlay</button>
+   <span class="hint" id="message">Ready</span>
+   <span class="grow"></span>
+   <a class="btn" href="settings.html">⚙ Setup Camera / Streaming</a>
+  </div>
+ </div>
+</section>
+
+<section class="grid g3">
+ <div class="cl-card status-card"><div class="hd">Camera</div><div class="bd">
+  <div class="status-line"><span>Status</span><b id="camStatus">STOPPED</b></div>
+  <div class="status-line"><span>Resolution</span><b id="resolution">—</b></div>
+ </div></div>
+ <div class="cl-card status-card"><div class="hd">Ball Tracking</div><div class="bd">
+  <div class="status-line"><span>Status</span><b id="trackingStatus">OFF</b></div>
+  <div class="status-line"><span>Confidence</span><b id="confidence">—</b></div>
+ </div></div>
+ <div class="cl-card status-card"><div class="hd">Recording / Stream</div><div class="bd">
+  <div class="status-line"><span>Recording</span><b id="recordStatus">IDLE</b></div>
+  <div class="status-line"><span>YouTube</span><b id="ytStatus">NOT CONFIGURED</b></div>
+  <div class="status-line"><span>Encoder FPS</span><b id="encFps">—</b></div>
+  <div class="status-line"><span>Dropped frames</span><b id="encDrop">—</b></div>
+  <div class="status-line"><span>Ingest health</span><b id="ytHealth">—</b></div>
+ </div></div>
+ <div class="cl-card status-card"><div class="hd">Realtime Health</div><div class="bd">
+  <div class="status-line"><span>CPU / temperature</span><b id="cpuHealth">—</b></div>
+  <div class="status-line"><span>Camera → AI</span><b id="camAiLatency">—</b></div>
+  <div class="status-line"><span>AI FPS</span><b id="aiFpsHealth">—</b></div>
+  <div class="status-line"><span>Camera control</span><b id="motorHealth">—</b></div>
+ </div></div>
+</section>
+</div>
+<script src="js/app.js"></script>
+<script>
+(async()=>{
+  await CL.shell("preview.html","Live Preview");
+  const $=id=>document.getElementById(id);
+  let camera=false, tracking=false, ytLive=false, overlay=true, frameStarted=false;
+  let detection=null,lastFrameW=0,lastFrameH=0,lastDetectionAt=0;
+  const tc=$("trackCanvas"), tctx=tc.getContext("2d");
+  let ws=CL.tracker({
+    onStatus:m=>{
+      camera=!!m.camera_running;
+      if(m.frame_width){lastFrameW=m.frame_width;lastFrameH=m.frame_height||lastFrameH;}
+      if(m.detected) detection=m, lastDetectionAt=Date.now(); else if(Date.now()-lastDetectionAt>500) detection=null;
+      drawTracking();
+      tracking=!!m.tracking;
+      setCameraUI(m); setTrackingUI(m);
+      if(m.detected){
+        $("ballHud").textContent=`BALL: ${Math.round((m.confidence||0)*100)}% • X ${m.x} Y ${m.y}`;
+        $("confidence").textContent=Math.round((m.confidence||0)*100)+"%";
+        $("ballHud").className="hud-pill good";
+      }else{
+        $("ballHud").textContent="BALL: NOT DETECTED";
+        $("confidence").textContent="—";
+        $("ballHud").className="hud-pill warn";
+      }
+      if(m.frame_width) $("resolution").textContent=`${m.frame_width}×${m.frame_height}`;
+    },
+    onDetection:m=>{
+      detection=m; lastDetectionAt=Date.now();
+      if(m.frame_width){lastFrameW=m.frame_width;lastFrameH=m.frame_height||lastFrameH;}
+      $("ballHud").textContent=`BALL: ${Math.round((m.confidence||0)*100)}% • X ${m.x} Y ${m.y}`;
+      $("confidence").textContent=Math.round((m.confidence||0)*100)+"%";
+      drawTracking();
+    },
+    onError:e=>show(e,true)
+  });
+  function show(t,err=false){$("message").textContent=t;$("message").style.color=err?"var(--red)":"var(--muted)";}
+  function drawTracking(){
+    const box=tc.getBoundingClientRect();
+    const d=devicePixelRatio||1; tc.width=Math.max(1,Math.round(box.width*d)); tc.height=Math.max(1,Math.round(box.height*d));
+    tctx.setTransform(d,0,0,d,0,0); tctx.clearRect(0,0,box.width,box.height);
+    if(!detection || !lastFrameW || !lastFrameH || Date.now()-lastDetectionAt>700) return;
+    const scale=Math.min(box.width/lastFrameW,box.height/lastFrameH);
+    const ox=(box.width-lastFrameW*scale)/2, oy=(box.height-lastFrameH*scale)/2;
+    const b=detection.box || [detection.x-10,detection.y-10,detection.x+10,detection.y+10];
+    const x=ox+b[0]*scale,y=oy+b[1]*scale,w=(b[2]-b[0])*scale,h=(b[3]-b[1])*scale;
+    tctx.strokeStyle="#22c55e"; tctx.lineWidth=3; tctx.strokeRect(x,y,w,h);
+    const cx=ox+detection.x*scale,cy=oy+detection.y*scale;
+    tctx.beginPath(); tctx.arc(cx,cy,6,0,Math.PI*2); tctx.fillStyle="#ef4444"; tctx.fill();
+    tctx.strokeStyle="#fff"; tctx.lineWidth=2; tctx.beginPath(); tctx.moveTo(cx-16,cy); tctx.lineTo(cx+16,cy); tctx.moveTo(cx,cy-16); tctx.lineTo(cx,cy+16); tctx.stroke();
+  }
+  window.addEventListener("resize",drawTracking); setInterval(drawTracking,100);
+
+  function setCameraUI(m){
+    const running=!!m.camera_running, connected=m.camera==="CONNECTED";
+    $("camStatus").textContent=connected?"CONNECTED":running?"STARTING":"STOPPED";
+    $("camHud").textContent=connected?"CAMERA: LIVE":running?"CAMERA: STARTING":"CAMERA: STOPPED";
+    $("camHud").className="hud-pill "+(connected?"good":"");
+    $("cameraBtn").textContent=running?"⏹ Stop Camera":"▶ Start Camera";
+    $("cameraBtn").className=running?"btn big-control running":"btn primary big-control";
+    $("trackingBtn").disabled=!running && !tracking;
+    if(running && connected && !frameStarted){ $("cameraFrame").src="/api/camera/mjpeg"; frameStarted=true; $("empty").style.display="none"; }
+    if(!running){ $("cameraFrame").removeAttribute("src"); frameStarted=false; $("empty").style.display=""; }
+  }
+  function setTrackingUI(m){
+    tracking=!!m.tracking;
+    $("trackingStatus").textContent=tracking?"ACTIVE":m.ai_connected?"READY":"OFFLINE";
+    $("trackHud").textContent=tracking?"TRACKING: ON":"TRACKING: OFF";
+    $("trackHud").className="hud-pill "+(tracking?"live":"");
+    $("trackingBtn").textContent=tracking?"⏹ Stop Tracking":"🎯 Start Tracking";
+    $("trackingBtn").className=tracking?"btn big-control running":"btn big-control";
+  }
+  $("cameraBtn").onclick=async()=>{
+    try{
+      if(camera){await CL.api("/api/camera/stop",{method:"POST"});show("Camera stopping…")} else {await CL.api("/api/camera/start",{method:"POST"});show("Camera starting…")}
+    }catch(e){show(e.message,true)}
+  };
+  $("trackingBtn").onclick=()=>{ const cmd=tracking?"stop_tracking":"start_tracking"; ws.send(cmd); show(cmd==="start_tracking"?"Ball tracking starting…":"Ball tracking stopping…"); };
+  $("recordBtn").onclick=async()=>{
+    try{const r=await CL.api("/api/recording/status"); if(["LIVE","STARTING","PAUSED"].includes(r.status)){await CL.api("/api/recording/stop",{method:"POST"});show("Recording stopped")}
+    else {const d=(await CL.api("/api/db/cricket"))||{};await CL.api("/api/recording/start",{method:"POST",body:{match_name:`${d.batTeam||"Team A"} vs ${d.bowlTeam||"Team B"}`}});show("Recording starting…")}}
+    catch(e){show(e.message,true)}
+  };
+  $("pauseBtn").onclick=async()=>{try{const r=await CL.api("/api/recording/status");await CL.api(`/api/recording/${r.status==="PAUSED"?"resume":"pause"}`,{method:"POST"});}catch(e){show(e.message,true)}};
+  $("youtubeBtn").onclick=async()=>{try{
+    const s=await CL.api("/api/stream/status"), d=s.destinations.youtube;
+    if(["LIVE","STARTING"].includes(d.status)){await CL.api("/api/stream/stop?dest=youtube",{method:"POST"});show("YouTube stopped")}
+    else {const r=await CL.api("/api/stream/youtube/start",{method:"POST"});show(r.status==="LIVE"?"YouTube is live":"YouTube starting…")}
+  }catch(e){show(e.message,true)}};
+  $("overlayBtn").onclick=()=>{overlay=!overlay;$("scoreOverlay").style.display=overlay?"":"none";$("overlayBtn").textContent=overlay?"👁 Score Overlay":"🚫 Score Overlay"};
+  async function poll(){
+    try{
+      const [r,s]=await Promise.all([CL.api("/api/recording/status"),CL.api("/api/stream/status")]);
+      $("recordStatus").textContent=r.status||"IDLE";
+      $("recordBtn").textContent=["LIVE","STARTING","PAUSED","STOPPING"].includes(r.status)?"⏹ Stop Recording":"⏺ Start Recording";
+      $("recordBtn").className=["LIVE","STARTING","PAUSED","STOPPING"].includes(r.status)?"btn big-control running":"btn primary big-control";
+      $("pauseBtn").disabled=!['LIVE','PAUSED'].includes(r.status);
+      $("pauseBtn").textContent=r.status==="PAUSED"?"▶ Resume Recording":"⏸ Pause Recording";
+      const yd=s.destinations.youtube;
+      $("encFps").textContent=yd.fps||"—";
+      $("encDrop").textContent=yd.dropped_frames??"—";
+      $("ytHealth").textContent=yd.ingest_health||"—";
+      $("ytHealth").style.color=yd.ingest_health==="GOOD"?"var(--green)":yd.ingest_health==="DEGRADED"?"var(--orange)":"";
+      const cam=s.camera||{}; const sys=cam.system||{};
+      $("cpuHealth").textContent=`${sys.cpu_load_1m??"—"} load · ${sys.cpu_temp_c??"—"}°C`;
+      $("camAiLatency").textContent=cam.latency_ms==null?"—":cam.latency_ms+" ms";
+      $("aiFpsHealth").textContent=cam.fps??"—";
+      $("motorHealth").textContent=cam.motor||"STOPPED";
+      ytLive=["LIVE","STARTING"].includes(yd.status); 
+      $("ytStatus").textContent=s.destinations.youtube.status;
+      $("streamHud").textContent=ytLive?"YOUTUBE: LIVE":"YOUTUBE: OFF";
+      $("streamHud").className="hud-pill "+(ytLive?"live":"");
+      $("youtubeBtn").textContent=ytLive?"⏹ Stop YouTube":"▶ Start YouTube";
+      $("youtubeBtn").className=ytLive?"btn big-control running":"btn primary big-control";
+    }catch(e){ }
+  }
+  await poll(); setInterval(poll,1000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recorded Matches — Cricket Live Production</title>
+<meta name="description" content="Previous matches: open, resume, view scorecards, export JSON/CSV/HTML, delete.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  .modal { position: fixed; inset: 0; background: rgba(13,34,56,.55); display: none; place-items: center; z-index: 9000; padding: 12px; }
+  .modal.open { display: grid; } .modal .cl-card { max-width: 900px; width: 100%; max-height: 90vh; overflow: auto; }
+  .match-actions { display:flex;gap:6px;flex-wrap:wrap; }
+  .recording-row { display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed var(--border); }
+  .recording-row:last-child { border-bottom:0; }
+  .recording-name { flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700; }
+  .recording-actions { display:flex;gap:6px;flex-wrap:wrap; }
+  @media(max-width:700px){
+    .cl-content { padding:10px 8px 24px; }
+    .cl-card > .hd { padding:10px 12px;font-size:14px; }
+    .cl-card > .bd { padding:10px; }
+    .match-table-wrap { overflow:visible!important; }
+    table.match-table, table.match-table tbody { display:block;width:100%; }
+    table.match-table thead { display:none; }
+    table.match-table tr { display:grid;grid-template-columns:1fr 1fr;gap:0 10px;border:1px solid var(--border);border-radius:10px;margin-bottom:9px;background:#fff;overflow:hidden; }
+    table.match-table td { display:grid;grid-template-columns:88px 1fr;gap:7px;padding:8px 9px;border-bottom:1px solid var(--border);font-size:12px;min-width:0; }
+    table.match-table td::before { content:attr(data-label);font-weight:800;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.6px; }
+    table.match-table td:last-child { grid-column:1/-1;border-bottom:0;display:block; }
+    table.match-table td:last-child::before { display:block;margin-bottom:6px; }
+    .match-actions .btn { padding:8px 9px;font-size:11px; }
+    .recording-row { align-items:flex-start;flex-direction:column; }
+    .recording-actions { width:100%; }
+    .recording-actions .btn { flex:1;justify-content:center; }
+    .modal { padding:6px; }
+  }
+</style>
+</head>
+<body>
+<div id="page">
+  <section class="cl-card">
+    <div class="hd">Previous Matches <span class="hint" style="margin-left:auto;text-transform:none;font-family:Inter">The scoring console keeps the 10 most recent saved matches.</span></div>
+    <div class="bd" style="padding:0;overflow:auto">
+      <table class="t match-table">
+        <thead><tr><th>Match</th><th>Date</th><th>Teams</th><th>Location</th><th>Ground</th><th>Result</th><th>Status</th><th>Recording</th><th>Actions</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="9" class="hint" style="padding:20px">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="cl-card"><div class="hd">Local Recordings</div><div class="bd" id="recs" class="hint">—</div></section>
+</div>
+<div class="modal" id="modal"><div class="cl-card"><div class="hd"><span id="mt">Scorecard</span><button class="btn" style="margin-left:auto" onclick="document.getElementById('modal').classList.remove('open')">✕ Close</button></div><div class="bd" id="mb"></div></div></div>
+
+<script src="js/app.js"></script>
+<script type="module">
+import { initializeApp, getDatabase, ref, onValue, set, remove } from "./js/localdb.js";
+const db = getDatabase(initializeApp({}));
+await CL.shell("matches.html", "Recorded Matches");
+const $ = (id) => document.getElementById(id);
+const safe = (s) => String(s).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+let data = {}, recs = [];
+
+function result(d) {
+  if (d.innings !== 2 || !d.target) return "—";
+  const [r, w] = String(d.score).split("/").map(Number);
+  if (r >= d.target) return `${d.batTeam} won by ${10 - w} wkts`;
+  const over = d.fullState && d.fullState.balls >= (d.maxOvers || 20) * 6;
+  return over || w >= 10 ? `${d.bowlTeam} won by ${d.target - 1 - r} runs` : "In progress";
+}
+function status(d) { const r = result(d); return d.innings === 2 && r !== "In progress" && r !== "—" ? "COMPLETED" : "IN PROGRESS"; }
+function recFor(d) {
+  const a = safe(`${d.batTeam} vs ${d.bowlTeam}`), b = safe(`${d.bowlTeam} vs ${d.batTeam}`), t = safe(d.title || "");
+  const matches = recs.filter((r) => [a, b, t].some((p) => p && (r.name.startsWith(p) || r.match?.startsWith(p.replaceAll("_"," ")))));
+  return matches[0] || null;
+}
+function render() {
+  const entries = Object.entries(data).sort((a, b) => b[1].savedAt - a[1].savedAt);
+  $("rows").innerHTML = entries.length ? entries.map(([k, d]) => {
+    const rc = recFor(d);
+    return `<tr><td data-label="Match"><b>${CL.esc(d.title || "Untitled")}</b></td><td data-label="Date">${CL.esc(d.dateLabel)}</td><td data-label="Teams">${CL.esc(d.batTeam)} vs ${CL.esc(d.bowlTeam)}</td><td data-label="Location">${CL.esc(d.location || "—")}</td><td data-label="Ground">${CL.esc(d.ground || d.venue || "—")}</td><td data-label="Result">${CL.esc(result(d))}</td>
+      <td data-label="Status"><span class="badge ${status(d) === "COMPLETED" ? "" : "ok"}">${status(d)}</span></td>
+      <td data-label="Recording">${rc ? `<a class="btn" href="/recordings/${encodeURIComponent(rc.name)}" target="_blank">▶ Watch</a>` : "—"}</td>
+      <td data-label="Actions"><div class="match-actions">
+        <button class="btn" data-a="open" data-k="${k}">Open</button><button class="btn green" data-a="resume" data-k="${k}">Resume</button>
+        <button class="btn" data-a="card" data-k="${k}">Scorecard</button><button class="btn" data-a="json" data-k="${k}">JSON</button>
+        <button class="btn" data-a="csv" data-k="${k}">CSV</button><button class="btn" data-a="html" data-k="${k}">HTML</button>
+        <button class="btn danger" data-a="del" data-k="${k}">Delete Match</button>
+      </div></td></tr>`;
+  }).join("") : '<tr><td colspan="9" class="hint" style="padding:20px">No saved matches yet. Use “Save” in the scoring console.</td></tr>';
+}
+onValue(ref(db, "matchHistory"), (s) => { data = s.val() || {}; render(); });
+async function refreshRecordings() {
+  try {
+    recs = await CL.api("/api/recordings");
+    render();
+    $("recs").innerHTML = recs.length ? recs.map((x) => `<div class="recording-row">
+      <div class="recording-name">${CL.esc(x.name)}</div>
+      <span class="hint">${(x.size / 1048576).toFixed(1)} MB · ${new Date(x.modified * 1000).toLocaleString()}</span>
+      <div class="recording-actions">
+        <a class="btn" href="/recordings/${encodeURIComponent(x.name)}" target="_blank">▶ Watch</a>
+        <button class="btn danger" data-rec-del="${CL.esc(x.name)}">🗑 Delete Recording</button>
+      </div>
+    </div>`).join("") : '<span class="hint">No recordings yet.</span>';
+  } catch (e) { $("recs").innerHTML = `<span class="hint">${CL.esc(e.message)}</span>`; }
+}
+refreshRecordings();
+$("recs").onclick = async (e) => {
+  const b = e.target.closest("[data-rec-del]"); if (!b) return;
+  const name = b.getAttribute("data-rec-del");
+  if (!confirm(`Delete recording "${name}"? This cannot be undone.`)) return;
+  try { await CL.api(`/api/recordings/${encodeURIComponent(name)}`, { method: "DELETE" }); CL.toast("Recording deleted"); await refreshRecordings(); }
+  catch (err) { CL.toast(err.message, true); }
+};
+
+const dl = (name, text, type) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
+const sr = (r, b) => (b > 0 ? ((r / b) * 100).toFixed(0) : "—"), eco = (r, b) => (b > 0 ? (r / (b / 6)).toFixed(2) : "—");
+function tables(d) {
+  const bat = (rows, team) => rows && rows.length ? `<h3 style="margin:14px 0 6px;color:var(--navy)">${CL.esc(team)} — Batting</h3><table class="t"><thead><tr><th>Batter</th><th>How out</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${CL.esc(r.name)}</td><td>${r.out ? CL.esc(r.howOut || "out") : "not out"}</td><td><b>${r.runs}</b></td><td>${r.balls}</td><td>${r.fours || 0}</td><td>${r.sixes || 0}</td><td>${sr(r.runs, r.balls)}</td></tr>`).join("")}</tbody></table>` : "";
+  const bwl = (rows, team) => rows && rows.length ? `<h3 style="margin:14px 0 6px;color:var(--navy)">${CL.esc(team)} — Bowling</h3><table class="t"><thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Wd</th><th>Nb</th><th>Eco</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${CL.esc(r.name)}</td><td>${CL.ov(r.balls)}</td><td>${r.runs}</td><td><b>${r.wkts}</b></td><td>${r.wides || 0}</td><td>${r.noballs || 0}</td><td>${eco(r.runs, r.balls)}</td></tr>`).join("")}</tbody></table>` : "";
+  const i1b = d.innings === 2 ? d.bowlTeam : d.batTeam, i1w = d.innings === 2 ? d.batTeam : d.bowlTeam;
+  return (d.inn1BatRows && d.inn1BatRows.length ? bat(d.inn1BatRows, i1b) + bwl(d.inn1BowlRows, i1w) : "") + bat(d.batRows, d.batTeam) + bwl(d.bowlRows, d.bowlTeam);
+}
+function csv(d) {
+  const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`, out = [["Innings", "Batter", "How out", "Runs", "Balls", "4s", "6s"].map(q).join(",")];
+  (d.inn1BatRows || []).forEach((r) => out.push([1, r.name, r.out ? r.howOut || "out" : "not out", r.runs, r.balls, r.fours || 0, r.sixes || 0].map(q).join(",")));
+  (d.batRows || []).forEach((r) => out.push([d.innings || 1, r.name, r.out ? r.howOut || "out" : "not out", r.runs, r.balls, r.fours || 0, r.sixes || 0].map(q).join(",")));
+  out.push("", ["Innings", "Bowler", "Balls", "Runs", "Wkts", "Wides", "NoBalls"].map(q).join(","));
+  (d.inn1BowlRows || []).forEach((r) => out.push([1, r.name, r.balls, r.runs, r.wkts, r.wides || 0, r.noballs || 0].map(q).join(",")));
+  (d.bowlRows || []).forEach((r) => out.push([d.innings || 1, r.name, r.balls, r.runs, r.wkts, r.wides || 0, r.noballs || 0].map(q).join(",")));
+  return out.join("\r\n");
+}
+$("rows").onclick = async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const k = b.dataset.k, d = data[k], a = b.dataset.a, fn = safe(d?.title || "match").slice(0, 40);
+  try {
+    if (a === "open" || a === "card") {
+      $("mt").textContent = d.title || "Scorecard";
+      $("mb").innerHTML = `<div class="hint">${CL.esc(d.dateLabel)} · ${CL.esc(d.location || d.venue || "")}${d.ground ? " · " + CL.esc(d.ground) : ""} · ${d.maxOvers || 20} overs</div><div class="big" style="margin:8px 0">${CL.esc(d.batTeam)} ${CL.esc(d.score)} <span class="hint">(${CL.esc(d.overs)} ov)</span></div><div>${CL.esc(result(d))}</div>${tables(d)}`;
+      $("modal").classList.add("open");
+    } else if (a === "resume") {
+      if (!d.fullState) return CL.toast("This saved match has no full state to resume.", true);
+      if (!confirm(`Resume "${d.title}"? This replaces the current live match.`)) return;
+      await CL.api("/api/db/undoStack", { method: "DELETE" });
+      await CL.api("/api/db/cricket", { method: "PUT", body: d.fullState });
+      await CL.api("/api/db/squads", { method: "PUT", body: { sqA: (d.fullState.batRows || []).map((r) => r.name).join("\n"), sqB: (d.fullState.bowlRows || []).map((r) => r.name).join("\n") } });
+      location.href = "admin.html?view=scoring";
+    } else if (a === "json") dl(`match_${fn}.json`, JSON.stringify(d, null, 2), "application/json");
+    else if (a === "csv") dl(`match_${fn}.csv`, csv(d), "text/csv");
+    else if (a === "html") dl(`scorecard_${fn}.html`, `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${CL.esc(d.title)}</title><style>body{font-family:Arial;margin:20px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px 8px;text-align:right}td:first-child,th:first-child{text-align:left}</style></head><body><h1>${CL.esc(d.title)}</h1><p>${CL.esc(d.dateLabel)} · ${CL.esc(d.venue || "")}</p>${tables(d).replace(/class="t"/g, "")}</body></html>`, "text/html");
+    else if (a === "del") { if (confirm("Delete this match?")) await remove(ref(db, `matchHistory/${k}`)); }
+  } catch (err) { CL.toast(err.message, true); }
+};
+</script>
+</body>
+</html>

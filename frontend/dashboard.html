@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — Cricket Live Production</title>
+<meta name="description" content="Cricket Live production dashboard: match, scoring, camera, AI ball tracking and streaming status.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="page">
+  <div id="resume" class="cl-card" style="display:none;border-color:#f0d58a;background:#fffaf0">
+    <div class="bd row"><b>Unfinished match found.</b><span id="resumeTxt" class="hint"></span><span class="grow" style="flex:1"></span>
+      <a class="btn green" href="admin.html?view=scoring">Resume match</a></div>
+  </div>
+
+  <section class="cl-card">
+    <div class="hd">Current Match <span class="badge" id="mStatus" style="margin-left:auto">NO MATCH</span></div>
+    <div class="bd">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div>
+          <div class="big" id="mTitle">No match set up</div>
+          <div class="hint" id="mMeta" style="margin-top:6px">Venue: — · Overs: —</div>
+        </div>
+        <div style="text-align:right"><div class="big" id="mScore">0/0</div><div class="hint" id="mOvers">0.0 overs · Innings —</div></div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <a class="btn primary lg" href="admin.html?view=setup">🏟 Setup Match</a>
+        <a class="btn lg" href="admin.html?view=scoring">🏏 Scoring</a>
+        <a class="btn lg" href="admin.html?view=overlay">🎬 Overlay</a>
+        <a class="btn lg" href="preview.html">📺 Live Preview</a>
+        <a class="btn lg" href="matches.html">🗂 Recorded Matches</a>
+        <a class="btn lg" href="settings.html">📷 Setup Camera / Streaming</a>
+        <a class="btn lg" href="system.html">⚙️ Settings</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid g3">
+    <div class="cl-card"><div class="hd">Camera</div><div class="bd"><span class="badge" id="sCam">UNKNOWN</span><div class="hint" id="sCamD" style="margin-top:8px"></div></div></div>
+    <div class="cl-card"><div class="hd">Ball Tracking (AI)</div><div class="bd"><span class="badge" id="sAI">OFFLINE</span><div class="hint" id="sAID" style="margin-top:8px"></div></div></div>
+    <div class="cl-card"><div class="hd">Streaming</div><div class="bd"><span class="badge" id="sStream">IDLE</span><div class="hint" id="sStreamD" style="margin-top:8px"></div></div></div>
+    <div class="cl-card"><div class="hd">YouTube</div><div class="bd"><span class="badge" id="sYT">—</span></div></div>
+    <div class="cl-card"><div class="hd">Facebook</div><div class="bd"><span class="badge" id="sFB">—</span></div></div>
+    <div class="cl-card"><div class="hd">Recording</div><div class="bd"><span class="badge" id="sRec">IDLE</span></div></div>
+  </section>
+</div>
+
+<script src="js/app.js"></script>
+<script type="module">
+import { initializeApp, getDatabase, ref, onValue } from "./js/localdb.js";
+const db = getDatabase(initializeApp({}));
+await CL.shell("dashboard.html", "Dashboard");
+const $ = (id) => document.getElementById(id);
+const setB = (id, text, cls) => { const e = $(id); e.textContent = text; e.className = "badge " + (cls || ""); };
+const cls = (s) => ({ CONNECTED: "ok", READY: "ok", ACTIVE: "ok", LIVE: "live", RECORDING: "bad", "NOT CONFIGURED": "warn", ERROR: "bad", OFFLINE: "bad", PAUSED: "warn" }[s] || "");
+
+let venue = "";
+onValue(ref(db, "matchHistory"), (s) => {
+  const v = s.val(); if (!v) return;
+  const last = Object.values(v).sort((a, b) => b.savedAt - a.savedAt)[0];
+  venue = last?.venue || ""; render(window.__m);
+});
+function render(d) {
+  window.__m = d;
+  if (!d || d.runs === undefined) { setB("mStatus", "NO MATCH"); return; }
+  $("mTitle").textContent = `${d.batTeam || "Team A"} vs ${d.bowlTeam || "Team B"}`;
+  $("mMeta").textContent = `Venue: ${venue || "—"} · Overs: ${d.maxOvers || "—"}${d.target ? " · Target " + d.target : ""}`;
+  $("mScore").textContent = `${d.runs}/${d.wkts}`;
+  $("mOvers").textContent = `${CL.ov(d.balls)} overs · Innings ${d.innings || 1}`;
+  const done = d.maxOvers && d.balls >= d.maxOvers * 6, allOut = d.wkts >= 10;
+  const finished = (done || allOut) && d.innings === 2;
+  setB("mStatus", finished ? "COMPLETED" : "IN PROGRESS", finished ? "" : "ok");
+  const unfinished = !finished && (d.balls > 0 || d.runs > 0);
+  $("resume").style.display = unfinished ? "" : "none";
+  $("resumeTxt").textContent = unfinished ? `${d.batTeam} ${d.runs}/${d.wkts} (${CL.ov(d.balls)})` : "";
+}
+onValue(ref(db, "cricket"), (s) => render(s.val()));
+
+CL.tracker({
+  onStatus: (m) => {
+    const ai = !m.ai_connected ? "OFFLINE" : m.model === "READY" ? (m.tracking ? "ACTIVE" : "READY") : "ERROR";
+    setB("sAI", ai, cls(ai));
+    $("sAID").textContent = !m.ai_connected ? "AI process ready — press Start Tracking when required" : m.model === "READY" ? `${m.device || ""} · ${m.fps ?? 0} FPS${m.detected ? " · ball " + Math.round((m.confidence || 0) * 100) + "%" : ""}` : (m.model_error || "Model not loaded");
+  },
+});
+async function pollCamera() {
+  try {
+    const c = await CL.api("/api/camera/status");
+    setB("sCam", c.status || "STOPPED", cls(c.status));
+    $("sCamD").textContent = c.error || (c.connected ? "Live camera ready" : "Camera stopped");
+  } catch (e) { setB("sCam","ERROR","bad"); }
+}
+
+async function poll() {
+  try {
+    const s = await CL.api("/api/stream/status");
+    const d = s.destinations;
+    setB("sYT", d.youtube.status, cls(d.youtube.status)); setB("sFB", d.facebook.status, cls(d.facebook.status));
+    setB("sStream", s.live ? "LIVE" : s.test_mode ? "TEST MODE" : "IDLE", s.live ? "live" : s.test_mode ? "warn" : "");
+    $("sStreamD").textContent = s.ffmpeg ? "" : "ffmpeg not installed";
+    const r = await CL.api("/api/recording/status");
+    setB("sRec", r.status, cls(r.status));
+  } catch (e) { setB("sStream", "BACKEND ERROR", "bad"); }
+}
+pollCamera(); poll(); setInterval(pollCamera, 2000); setInterval(poll, 3000);
+</script>
+</body>
+</html>

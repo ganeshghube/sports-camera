@@ -1,0 +1,3950 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cricket Overlay</title>
+    <script>const _q=new URLSearchParams(location.search); if(_q.get('scorebar')==='1'){document.documentElement.classList.add('scorebar-only')} if(_q.get('overlay')==='1'){document.documentElement.classList.add('overlay-only')}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --ta: #1a56b0;
+            --ta-light: #2672d4;
+            --tb: #006747;
+            --tb-light: #008f63;
+            --gold: #f5c518;
+            --gold2: #ffd54f;
+            --dark: rgba(6, 6, 14, 0.96);
+            --dark2: rgba(10, 10, 22, 0.93);
+            --panel: rgba(14, 14, 28, 0.97);
+            --row: rgba(255, 255, 255, 0.04);
+            --rowh: rgba(255, 255, 255, 0.08);
+            --brd: rgba(255, 255, 255, 0.08);
+            --text: #e8e8f0;
+            --muted: #888899;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: rgba(0, 0, 0, 0);
+            font-family: 'Barlow Condensed', sans-serif;
+            color: var(--text);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        html.overlay-only, html.overlay-only body {
+            background: transparent !important;
+            overflow: hidden !important;
+        }
+
+        /* ── Audio Button ── */
+        #audioBtn {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: 999;
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: rgba(10, 10, 22, 0.88);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.55);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .2s, color .2s, border-color .2s;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+            user-select: none;
+            outline: none;
+        }
+
+        #audioBtn:hover {
+            background: rgba(20, 20, 40, 0.95);
+            color: rgba(255, 255, 255, 0.85);
+            border-color: rgba(255, 255, 255, 0.22);
+        }
+
+        #audioBtn.active {
+            color: var(--gold);
+            border-color: rgba(245, 197, 24, 0.4);
+            background: rgba(20, 16, 4, 0.92);
+        }
+
+        #audioBtn .ab-icon {
+            line-height: 1;
+            pointer-events: none;
+        }
+
+        /* ── Commentary Ticker — minimal, above scorebar ── */
+        #commentaryTicker {
+            position: fixed;
+            bottom: 122px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 900px;
+            z-index: 38;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity .35s ease;
+        }
+
+        #commentaryTicker.show {
+            opacity: 1;
+        }
+
+        .ticker-inner {
+            background: rgba(4, 4, 10, 0.82);
+            border: 1px solid rgba(255, 255, 255, .05);
+            border-radius: 4px;
+            padding: 4px 14px 4px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(6px);
+            overflow: hidden;
+        }
+
+        .ticker-badge {
+            background: var(--gold);
+            color: #000;
+            font-size: 8px;
+            font-weight: 900;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 1px 5px;
+            border-radius: 2px;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        .ticker-badge.red {
+            background: #e63946;
+            color: #fff;
+        }
+
+        .ticker-badge.purple {
+            background: #9b72cf;
+            color: #fff;
+        }
+
+        .ticker-badge.blue {
+            background: #118ab2;
+            color: #fff;
+        }
+
+        .ticker-badge.green {
+            background: #06d6a0;
+            color: #000;
+        }
+
+        .ticker-badge.orange {
+            background: #e67e22;
+            color: #fff;
+        }
+
+        .ticker-text {
+            font-size: 11px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, .75);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            animation: tickerSlide .35s ease-out both;
+        }
+
+        @keyframes tickerSlide {
+            from {
+                opacity: 0;
+                transform: translateX(14px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0)
+            }
+        }
+
+        /* ── Loading shim ── */
+        #loadingShim {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(4, 4, 12, 0.0);
+            pointer-events: none;
+            transition: opacity .4s;
+        }
+
+        #loadingShim.gone {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* ── Rain & Announcements ── */
+        .ann-rain {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 48;
+            overflow: hidden;
+        }
+
+        .rain-emoji {
+            position: absolute;
+            top: -80px;
+            font-size: 36px;
+            opacity: 0;
+            animation: rainFall linear forwards;
+            filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .7));
+            user-select: none;
+        }
+
+        @keyframes rainFall {
+            0% {
+                opacity: 0;
+                transform: translateY(0) rotate(0deg) scale(0.6);
+            }
+
+            8% {
+                opacity: .95;
+                transform: translateY(40px) rotate(10deg) scale(1.1);
+            }
+
+            90% {
+                opacity: .8;
+                transform: translateY(var(--fall-dist)) rotate(var(--spin)) scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(calc(var(--fall-dist)+60px)) rotate(var(--spin)) scale(0.8);
+            }
+        }
+
+        .ann-wrap {
+            position: fixed;
+            bottom: 116px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 96%;
+            max-width: 1080px;
+            pointer-events: none;
+            z-index: 50;
+            display: flex;
+            justify-content: center;
+        }
+
+        .ann-toast {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+            padding: 18px 40px 18px 28px;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            min-width: 360px;
+            max-width: 780px;
+            box-shadow: 0 12px 60px rgba(0, 0, 0, .98), 0 0 0 1px rgba(255, 255, 255, .08);
+            opacity: 0;
+            transform: translateY(30px) scale(0.93);
+            transition: opacity .55s cubic-bezier(.175, .885, .32, 1.275), transform .55s cubic-bezier(.175, .885, .32, 1.275);
+        }
+
+        .ann-toast.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .ann-toast.leaving {
+            opacity: 0;
+            transform: translateY(-20px) scale(0.94);
+            transition: opacity .5s ease-in, transform .5s ease-in;
+        }
+
+        .ann-toast::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(105deg, transparent 25%, rgba(255, 255, 255, .12) 50%, transparent 75%);
+            animation: annShimmer 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes annShimmer {
+            0% {
+                transform: translateX(-120%)
+            }
+
+            100% {
+                transform: translateX(220%)
+            }
+        }
+
+        .ann-toast::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--ann-accent, #f5c518), transparent);
+            animation: annGlowLine 3s ease-in-out infinite;
+        }
+
+        @keyframes annGlowLine {
+
+            0%,
+            100% {
+                opacity: .5
+            }
+
+            50% {
+                opacity: 1
+            }
+        }
+
+        .ann-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 4px;
+            border-radius: 0 0 8px 8px;
+            transform-origin: left center;
+            animation: annProgress linear forwards;
+            box-shadow: 0 0 8px var(--ann-accent, #f5c518);
+        }
+
+        @keyframes annProgress {
+            from {
+                width: 100%
+            }
+
+            to {
+                width: 0%
+            }
+        }
+
+        .ann-toast.style-gold {
+            --ann-accent: #f5c518;
+            background: linear-gradient(135deg, rgba(35, 26, 0, .98), rgba(14, 10, 0, .98));
+            border: 1px solid rgba(240, 180, 41, .4);
+            border-left: 5px solid var(--gold);
+        }
+
+        .ann-toast.style-gold .ann-progress {
+            background: linear-gradient(90deg, var(--gold), #fff176);
+        }
+
+        .ann-toast.style-red {
+            --ann-accent: #e63946;
+            background: linear-gradient(135deg, rgba(32, 0, 0, .98), rgba(10, 0, 0, .98));
+            border: 1px solid rgba(230, 57, 70, .4);
+            border-left: 5px solid #e63946;
+        }
+
+        .ann-toast.style-red .ann-progress {
+            background: linear-gradient(90deg, #e63946, #ff8080);
+        }
+
+        .ann-toast.style-purple {
+            --ann-accent: #9b72cf;
+            background: linear-gradient(135deg, rgba(22, 8, 44, .98), rgba(8, 2, 18, .98));
+            border: 1px solid rgba(155, 114, 207, .4);
+            border-left: 5px solid #9b72cf;
+        }
+
+        .ann-toast.style-purple .ann-progress {
+            background: linear-gradient(90deg, #9b72cf, #e8d5ff);
+        }
+
+        .ann-toast.style-blue {
+            --ann-accent: #118ab2;
+            background: linear-gradient(135deg, rgba(0, 18, 38, .98), rgba(0, 6, 16, .98));
+            border: 1px solid rgba(17, 138, 178, .4);
+            border-left: 5px solid #118ab2;
+        }
+
+        .ann-toast.style-blue .ann-progress {
+            background: linear-gradient(90deg, #118ab2, #a8dfff);
+        }
+
+        .ann-toast.style-custom {
+            --ann-accent: #06d6a0;
+            background: linear-gradient(135deg, rgba(0, 22, 18, .98), rgba(0, 8, 6, .98));
+            border: 1px solid rgba(6, 214, 160, .35);
+            border-left: 5px solid #06d6a0;
+        }
+
+        .ann-toast.style-custom .ann-progress {
+            background: linear-gradient(90deg, #06d6a0, #a0f5d5);
+        }
+
+        .ann-toast.style-win {
+            --ann-accent: #ffd700;
+            background: linear-gradient(135deg, rgba(40, 30, 0, .99) 0%, rgba(20, 14, 0, .99) 50%, rgba(8, 4, 0, .99) 100%);
+            border: 2px solid rgba(255, 215, 0, .6);
+            border-left: 6px solid #ffd700;
+            box-shadow: 0 12px 60px rgba(0, 0, 0, .98), 0 0 40px rgba(255, 215, 0, .15);
+        }
+
+        .ann-toast.style-win .ann-progress {
+            background: linear-gradient(90deg, #ffd700, #fff9c4, #ffd700);
+        }
+
+        .ann-toast.style-win .ann-text {
+            color: #ffd700;
+            font-size: 30px;
+            letter-spacing: 2px;
+        }
+
+        .ann-toast.style-tie {
+            --ann-accent: #a0c4ff;
+            background: linear-gradient(135deg, rgba(0, 14, 38, .99) 0%, rgba(0, 8, 24, .99) 60%, rgba(0, 4, 14, .99) 100%);
+            border: 2px solid rgba(100, 180, 255, .5);
+            border-left: 6px solid #a0c4ff;
+        }
+
+        .ann-toast.style-tie .ann-progress {
+            background: linear-gradient(90deg, #a0c4ff, #e8f4ff, #a0c4ff);
+        }
+
+        .ann-toast.style-tie .ann-text {
+            color: #a0c4ff;
+            font-size: 30px;
+        }
+
+        .ann-emoji {
+            font-size: 56px;
+            line-height: 1;
+            filter: drop-shadow(0 3px 12px rgba(0, 0, 0, .9));
+            animation: annEmojiBounce .7s cubic-bezier(.36, .07, .19, .97) both;
+            flex-shrink: 0;
+        }
+
+        @keyframes annEmojiBounce {
+            0% {
+                transform: scale(0.1) rotate(-20deg);
+                opacity: 0
+            }
+
+            55% {
+                transform: scale(1.35) rotate(8deg);
+                opacity: 1
+            }
+
+            75% {
+                transform: scale(0.9) rotate(-4deg)
+            }
+
+            90% {
+                transform: scale(1.06) rotate(2deg)
+            }
+
+            100% {
+                transform: scale(1) rotate(0)
+            }
+        }
+
+        .ann-emoji-ring {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .ann-emoji-ring::after {
+            content: '';
+            position: absolute;
+            inset: -8px;
+            border-radius: 50%;
+            border: 2px solid var(--ann-accent, #f5c518);
+            opacity: 0;
+            animation: annRingPulse 1.8s ease-in-out .7s infinite;
+        }
+
+        @keyframes annRingPulse {
+            0% {
+                opacity: .7;
+                transform: scale(.8)
+            }
+
+            50% {
+                opacity: .2;
+                transform: scale(1.2)
+            }
+
+            100% {
+                opacity: .7;
+                transform: scale(.8)
+            }
+        }
+
+        .ann-body {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+        }
+
+        .ann-text {
+            font-size: 34px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            line-height: 1;
+            text-shadow: 0 2px 16px rgba(0, 0, 0, .9);
+            animation: annTextSlide .55s cubic-bezier(.175, .885, .32, 1.275) .1s both;
+        }
+
+        @keyframes annTextSlide {
+            0% {
+                opacity: 0;
+                transform: translateX(-20px)
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateX(0)
+            }
+        }
+
+        .ann-toast.style-gold .ann-text {
+            color: var(--gold);
+        }
+
+        .ann-toast.style-red .ann-text {
+            color: #ff8080;
+        }
+
+        .ann-toast.style-purple .ann-text {
+            color: #c4a0ff;
+        }
+
+        .ann-toast.style-blue .ann-text {
+            color: #7ec8ff;
+        }
+
+        .ann-toast.style-custom .ann-text {
+            color: #06d6a0;
+        }
+
+        .ann-sub {
+            font-size: 14px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, .65);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            animation: annTextSlide .55s cubic-bezier(.175, .885, .32, 1.275) .2s both;
+        }
+
+        .ann-floaters {
+            display: flex;
+            gap: 8px;
+            margin-top: 6px;
+            animation: annTextSlide .55s cubic-bezier(.175, .885, .32, 1.275) .3s both;
+        }
+
+        .ann-floater {
+            font-size: 20px;
+            animation: annFloat ease-in-out infinite alternate;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .6));
+        }
+
+        @keyframes annFloat {
+            0% {
+                transform: translateY(0) rotate(-5deg) scale(1)
+            }
+
+            100% {
+                transform: translateY(-6px) rotate(5deg) scale(1.12)
+            }
+        }
+
+        .ann-particles {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .ann-p {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0;
+            animation: annParticle ease-out forwards;
+        }
+
+        @keyframes annParticle {
+            0% {
+                opacity: 1;
+                transform: translate(0, 0) scale(1)
+            }
+
+            100% {
+                opacity: 0;
+                transform: translate(var(--tx), var(--ty)) scale(0)
+            }
+        }
+
+        .ann-player-photo {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--ann-accent, #f5c518);
+            flex-shrink: 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, .8);
+            animation: annEmojiBounce .7s cubic-bezier(.36, .07, .19, .97) both;
+        }
+
+        /* ── Score Bar ── */
+        .sb-wrap {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 96%;
+            max-width: 1080px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            filter: drop-shadow(0 8px 40px rgba(0, 0, 0, .95));
+            transition: opacity .5s, transform .5s;
+            z-index: 40;
+        }
+
+        .sb-wrap.hidden {
+            opacity: 0;
+            transform: translateX(-50%) translateY(24px);
+            pointer-events: none;
+        }
+
+        .sb-badges {
+            display: flex;
+            gap: 0;
+            align-items: flex-end;
+        }
+
+        .tgt-badge {
+            background: linear-gradient(90deg, #b8860b, var(--gold));
+            color: #000;
+            padding: 4px 20px 4px 14px;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border-radius: 5px 5px 0 0;
+            clip-path: polygon(0 0, 96% 0, 100% 100%, 0 100%);
+            display: none;
+        }
+
+        .tgt-badge.on {
+            display: inline-block;
+        }
+
+        .fh-badge {
+            background: linear-gradient(90deg, #d35400, #e67e22);
+            color: #fff;
+            padding: 4px 20px 4px 14px;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border-radius: 5px 5px 0 0;
+            display: none;
+        }
+
+        .fh-badge.on {
+            display: inline-block;
+            animation: fhp .9s infinite;
+        }
+
+        @keyframes fhp {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .45
+            }
+        }
+
+        .score-bar {
+            display: flex;
+            width: 100%;
+            height: 84px;
+            background: var(--dark);
+            border-top: 3px solid var(--ta);
+            border-radius: 3px 3px 0 0;
+            overflow: hidden;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, .06);
+        }
+
+        .sb-team {
+            flex: 0 0 235px;
+            min-width: 235px;
+            background: linear-gradient(135deg, var(--ta) 0%, rgba(0, 0, 0, 0) 100%);
+            border-right: 1px solid var(--brd);
+            padding: 0 18px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+        }
+
+        .sb-team::after {
+            content: '';
+            position: absolute;
+            right: -1px;
+            top: 0;
+            bottom: 0;
+            width: 40px;
+            background: linear-gradient(90deg, transparent, var(--dark));
+        }
+
+        .sb-tm-name {
+            font-size: 17px;
+            font-weight: 700;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            line-height: 1;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+        }
+
+        .sb-score {
+            font-size: 42px;
+            font-weight: 900;
+            line-height: 1;
+            margin-top: 3px;
+            display: flex;
+            align-items: baseline;
+            gap: 1px;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, .8);
+        }
+
+        .sb-score-wkts {
+            font-size: 33px;
+            color: rgba(255, 255, 255, .85);
+        }
+
+        .sb-score-ovs {
+            font-size: 15px;
+            color: rgba(255, 255, 255, .65);
+            font-weight: 500;
+            margin-left: 6px;
+        }
+
+        .sb-bat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 4px;
+            padding: 0 14px;
+        }
+
+        .bat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 240px;
+            gap: 7px;
+        }
+
+        .bat-row-photo {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid rgba(255, 255, 255, .15);
+            background: #111;
+            flex-shrink: 0;
+        }
+
+        .bat-row.on .bat-row-photo {
+            border-color: var(--gold);
+        }
+
+        .bat-name {
+            font-size: 22px;
+            font-weight: 600;
+            color: #bbb;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 128px;
+            letter-spacing: .3px;
+            flex: 1;
+        }
+
+        .bat-row.on .bat-name {
+            color: var(--gold);
+            font-weight: 700;
+        }
+
+        .bat-row.on .bat-name::before {
+            content: '● ';
+            font-size: 9px;
+            vertical-align: middle;
+            color: var(--gold);
+        }
+
+        .bat-stat {
+            font-size: 22px;
+            color: #e0e0e0;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .bat-row.on .bat-stat {
+            color: #fff;
+        }
+
+        .bat-stat .sb {
+            color: #999;
+            font-size: 16px;
+            font-weight: 400;
+        }
+
+        .sb-bwl {
+            flex: 0 0 300px;
+            background: linear-gradient(225deg, rgba(0, 80, 55, .55) 0%, rgba(6, 6, 18, .98) 55%);
+            border-left: 3px solid rgba(0, 103, 71, .9);
+            padding: 0 18px 0 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-end;
+            text-align: right;
+            position: relative;
+        }
+
+        .sb-bwl::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 30px;
+            background: linear-gradient(90deg, rgba(6, 6, 18, .6), transparent);
+        }
+
+        .sb-bwl-inner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sb-bwl-photo {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid rgba(0, 103, 71, .8);
+            background: #111;
+            flex-shrink: 0;
+        }
+
+        .sb-bwl-text {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .bwl-name {
+            font-size: 22px;
+            color: #fff;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 170px;
+            letter-spacing: .3px;
+            text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
+        }
+
+        .bwl-stat {
+            font-size: 22px;
+            color: var(--gold);
+            font-weight: 800;
+            margin: 1px 0;
+            letter-spacing: .5px;
+        }
+
+        .bwl-stat .bwl-ov {
+            color: #aaa;
+            font-size: 16px;
+            font-weight: 400;
+        }
+
+        .og {
+            display: flex;
+            gap: 4px;
+            justify-content: flex-end;
+            margin-top: 3px;
+            flex-wrap: nowrap;
+        }
+
+        .ball {
+            min-width: 26px;
+            height: 26px;
+            padding: 0 4px;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 800;
+            border: 1px solid rgba(255, 255, 255, .1);
+            color: #888;
+            background: rgba(255, 255, 255, .05);
+        }
+
+        .bW {
+            background: #7b1e1e;
+            border-color: #e63946;
+            color: #ff8080;
+        }
+
+        .b4 {
+            background: #0a3d2e;
+            border-color: #06d6a0;
+            color: #06d6a0;
+        }
+
+        .b6 {
+            background: #2a1560;
+            border-color: #9b72cf;
+            color: #c4a0ff;
+        }
+
+        .b0 {
+            background: rgba(255, 255, 255, .06);
+            color: #888;
+            border-color: rgba(255, 255, 255, .15);
+        }
+
+        .bWd {
+            background: #3d2200;
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+
+        .bNb {
+            background: #3d1400;
+            border-color: #e67e22;
+            color: #e67e22;
+        }
+
+        .bBy {
+            background: #00233d;
+            border-color: #118ab2;
+            color: #6ec6e8;
+        }
+
+        .bLb {
+            background: #0a2e0a;
+            border-color: #2ecc71;
+            color: #7fff7f;
+        }
+
+        .rates {
+            background: rgba(0, 0, 0, .9);
+            display: flex;
+            width: 100%;
+            font-size: 14px;
+            letter-spacing: .5px;
+            border-radius: 0 0 3px 3px;
+            border: 1px solid rgba(255, 255, 255, .08);
+            border-top: none;
+        }
+
+        .ri {
+            padding: 5px 18px;
+            color: #aaa;
+            border-right: 1px solid rgba(255, 255, 255, .07);
+        }
+
+        .ri b {
+            color: var(--gold);
+            font-weight: 700;
+        }
+
+        .ri-rrr b {
+            color: #e63946;
+            font-weight: 700;
+        }
+
+        .ri-inn b {
+            color: #c8c8d8;
+            font-weight: 600;
+        }
+
+        .uf {
+            animation: sbflash .5s ease-out;
+        }
+
+        @keyframes sbflash {
+            0% {
+                opacity: .6
+            }
+
+            100% {
+                opacity: 1
+            }
+        }
+
+        /* ── Scorecard ── */
+        .sc-wrap {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            width: 96%;
+            max-width: 1080px;
+            transform: translateX(-50%) translateY(0);
+            display: flex;
+            flex-direction: column;
+            background: rgba(6, 6, 14, 0.97);
+            border-top: 2px solid rgba(255, 255, 255, .08);
+            border-radius: 8px 8px 0 0;
+            transition: opacity .45s cubic-bezier(.4, 0, .2, 1), transform .45s cubic-bezier(.4, 0, .2, 1);
+            z-index: 45;
+            overflow: hidden;
+        }
+
+        .sc-wrap.hidden {
+            opacity: 0;
+            transform: translateX(-50%) translateY(60px);
+            pointer-events: none;
+        }
+
+        .sc-auto-bar {
+            height: 3px;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, .06);
+            display: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sc-auto-bar.running {
+            display: block;
+        }
+
+        .sc-auto-bar-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: linear-gradient(90deg, var(--gold), #06d6a0);
+            width: 100%;
+            animation: autoBarShrink linear forwards;
+            transform-origin: left;
+        }
+
+        @keyframes autoBarShrink {
+            from {
+                width: 100%
+            }
+
+            to {
+                width: 0%
+            }
+        }
+
+        .sc-team-hdr {
+            display: flex;
+            align-items: stretch;
+            height: 62px;
+            flex-shrink: 0;
+        }
+
+        .sc-hdr-color {
+            width: 8px;
+            background: var(--ta);
+            flex-shrink: 0;
+        }
+
+        .sc-hdr-main {
+            flex: 1;
+            background: linear-gradient(90deg, var(--ta) 0%, rgba(12, 12, 28, .98) 45%, rgba(12, 12, 28, .98) 100%);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 0 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sc-hdr-main::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, rgba(255, 255, 255, .04) 0%, transparent 60%);
+        }
+
+        .sc-team-name {
+            font-size: 36px;
+            font-weight: 900;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, .8);
+            z-index: 1;
+        }
+
+        .sc-tournament {
+            font-size: 14px;
+            color: rgba(255, 255, 255, .6);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-family: 'Barlow', sans-serif;
+            font-weight: 500;
+            z-index: 1;
+        }
+
+        .sc-hdr-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 24px;
+            background: rgba(10, 10, 22, .98);
+            border-left: 1px solid var(--brd);
+            min-width: 205px;
+            flex-shrink: 0;
+        }
+
+        .sc-total-lbl {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .sc-total-val {
+            font-size: 40px;
+            font-weight: 900;
+            color: var(--gold);
+            letter-spacing: 1px;
+            line-height: 1;
+        }
+
+        .sc-total-detail {
+            font-size: 14px;
+            color: #aaa;
+            margin-top: 2px;
+        }
+
+        .sc-tabs {
+            display: flex;
+            background: rgba(0, 0, 0, .5);
+            border-bottom: 1px solid var(--brd);
+            flex-shrink: 0;
+        }
+
+        .sc-tab {
+            flex: 1;
+            padding: 6px 14px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #888;
+            text-align: center;
+            transition: all .2s;
+            border-bottom: 2px solid transparent;
+        }
+
+        .sc-tab.active {
+            color: var(--gold);
+            border-bottom-color: var(--gold);
+            background: rgba(240, 180, 41, .05);
+        }
+
+        .need-bar {
+            display: none;
+            flex-shrink: 0;
+            background: linear-gradient(90deg, #4a0000, rgba(0, 0, 0, 0) 80%);
+            padding: 5px 20px;
+            border-bottom: 1px solid rgba(230, 57, 70, .2);
+            font-size: 14px;
+            color: #e63946;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .need-bar.on {
+            display: block;
+        }
+
+        .sc-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--panel);
+        }
+
+        .sc-col-hdr {
+            display: grid;
+            grid-template-columns: 1fr 60px 70px 80px 80px 70px;
+            background: rgba(0, 0, 0, .6);
+            border-bottom: 1px solid rgba(255, 255, 255, .12);
+            padding: 5px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            flex-shrink: 0;
+        }
+
+        .sc-col-hdr span {
+            font-size: 13px;
+            font-weight: 700;
+            color: #777;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: right;
+        }
+
+        .sc-col-hdr span:first-child {
+            text-align: left;
+        }
+
+        .sc-col-hdr.bat-hdr {
+            grid-template-columns: 36px 1fr 170px 60px 60px 52px 52px 60px;
+        }
+
+        .sc-row {
+            display: grid;
+            grid-template-columns: 1fr 60px 70px 80px 80px 70px;
+            padding: 6px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, .05);
+            align-items: center;
+            transition: background .15s;
+        }
+
+        .sc-row:hover {
+            background: var(--rowh);
+        }
+
+        .sc-row.bat-row-sc {
+            grid-template-columns: 36px 1fr 170px 60px 60px 52px 52px 60px;
+        }
+
+        .sc-row.alt {
+            background: var(--row);
+        }
+
+        .sc-row.hlt {
+            background: rgba(240, 180, 41, .07);
+        }
+
+        .sc-row.dis-row {
+            opacity: .6;
+        }
+
+        .sc-row.dis-row>span:first-child {
+            color: #444;
+            text-decoration: line-through;
+        }
+
+        .sc-row.dnb-row {
+            opacity: .3;
+        }
+
+        .sc-cell {
+            font-size: 19px;
+            color: #ccc;
+            text-align: right;
+            line-height: 1.1;
+        }
+
+        .sc-cell.left {
+            text-align: left;
+            font-size: 19px;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sc-cell.how {
+            text-align: left;
+            font-size: 14px;
+            color: #888;
+            font-weight: 400;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sc-cell.gold {
+            color: var(--gold);
+            font-weight: 700;
+        }
+
+        .sc-cell.green {
+            color: #06d6a0;
+            font-weight: 600;
+        }
+
+        .sc-cell.red {
+            color: #e63946;
+            font-weight: 600;
+        }
+
+        .sc-cell.strike {
+            color: var(--gold);
+            font-weight: 700;
+        }
+
+        .sc-player-photo {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid rgba(255, 255, 255, .1);
+            background: #111;
+        }
+
+        .sc-row.hlt .sc-player-photo {
+            border-color: var(--gold);
+        }
+
+        .sc-fow {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, .45);
+            border-top: 1px solid rgba(255, 255, 255, .08);
+            padding: 3px 14px;
+            flex-wrap: wrap;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+
+        .sc-fow-lbl {
+            font-size: 12px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-right: 6px;
+            white-space: nowrap;
+        }
+
+        .sc-fow-item {
+            font-size: 14px;
+            color: #aaa;
+            padding: 1px 8px;
+            border-right: 1px solid rgba(255, 255, 255, .08);
+        }
+
+        .sc-fow-item:last-child {
+            border-right: none;
+        }
+
+        .sc-fow-item b {
+            color: var(--gold);
+        }
+
+        .sc-footer {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            background: rgba(0, 0, 0, .75);
+            border-top: 1px solid rgba(255, 255, 255, .14);
+            flex-shrink: 0;
+        }
+
+        .sc-footer-cell {
+            padding: 6px 14px;
+            border-right: 1px solid rgba(255, 255, 255, .06);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1px;
+        }
+
+        .sc-footer-cell:last-child {
+            border-right: none;
+        }
+
+        .sc-footer-lbl {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .sc-footer-val {
+            font-size: 24px;
+            font-weight: 900;
+            color: #e8e8f0;
+            letter-spacing: 1px;
+            line-height: 1;
+        }
+
+        .sc-footer-val.gold {
+            color: var(--gold);
+        }
+
+        .sc-bowl-hdr .sc-hdr-color {
+            background: var(--tb);
+        }
+
+        .sc-bowl-hdr .sc-hdr-main {
+            background: linear-gradient(90deg, var(--tb) 0%, rgba(12, 12, 28, .98) 45%, rgba(12, 12, 28, .98) 100%);
+        }
+
+        .kbd-hint {
+            text-align: center;
+            font-size: 9px;
+            color: #222;
+            letter-spacing: 1px;
+            padding: 3px;
+            background: rgba(0, 0, 0, .6);
+            flex-shrink: 0;
+        }
+
+        .kbd-hint span {
+            background: #111;
+            border: 1px solid #2a2a2a;
+            border-radius: 2px;
+            padding: 1px 5px;
+            color: #444;
+            font-size: 9px;
+        }
+
+        .live-badge {
+            background: #e63946;
+            color: #fff;
+            padding: 2px 9px;
+            border-radius: 2px;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            animation: lpulse 1.5s infinite;
+            white-space: nowrap;
+        }
+
+        @keyframes lpulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .55
+            }
+        }
+
+        /* ── Over badge & player overlays ── */
+        .over-badge {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 60;
+            background: linear-gradient(135deg, #2a1e00, #1a1200);
+            border: 1px solid var(--gold);
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--gold);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            opacity: 0;
+            transform: translateY(-10px) scale(.9);
+            transition: opacity .3s, transform .3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .over-badge.show {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .id-card-photo {
+            width: 80px;
+            height: 108px;
+            border-radius: 6px;
+            object-fit: contain;
+            object-position: center center;
+            display: block;
+            flex-shrink: 0;
+            background: #111;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, .7);
+        }
+
+        .over-players-wrap {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 96%;
+            max-width: 740px;
+            z-index: 55;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity .4s;
+        }
+
+        .over-players-wrap.show {
+            opacity: 1;
+        }
+
+        .over-players-box {
+            background: linear-gradient(135deg, rgba(10, 10, 22, .97), rgba(6, 6, 14, .98));
+            border: 1px solid rgba(255, 255, 255, .08);
+            border-radius: 10px;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, .9);
+        }
+
+        .over-players-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 10px;
+        }
+
+        .over-player-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+            min-width: 80px;
+        }
+
+        .over-id-wrap {
+            position: relative;
+            width: 80px;
+            height: 108px;
+            flex-shrink: 0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .over-id-wrap .id-card-photo {
+            border: 2px solid rgba(255, 255, 255, .12);
+        }
+
+        .over-id-wrap.striker .id-card-photo {
+            border: 2px solid var(--gold);
+            box-shadow: 0 0 14px rgba(240, 180, 41, .35);
+        }
+
+        .over-id-wrap.bowler .id-card-photo {
+            border: 2px solid #06d6a0;
+            box-shadow: 0 0 14px rgba(6, 214, 160, .3);
+        }
+
+        .over-id-role {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 3px 4px;
+            font-size: 8px;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            backdrop-filter: blur(4px);
+        }
+
+        .over-id-role.striker {
+            background: rgba(240, 180, 41, .85);
+            color: #000;
+        }
+
+        .over-id-role.nonstriker {
+            background: rgba(0, 0, 0, .75);
+            color: #888;
+        }
+
+        .over-id-role.bowler {
+            background: rgba(6, 214, 160, .85);
+            color: #000;
+        }
+
+        .over-player-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #ddd;
+            text-align: center;
+            margin-top: 5px;
+            max-width: 85px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .over-player-stat {
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+            margin-top: 1px;
+        }
+
+        .over-divider {
+            width: 1px;
+            height: 90px;
+            background: rgba(255, 255, 255, .08);
+            flex-shrink: 0;
+        }
+
+        .over-summary {
+            flex: 1;
+        }
+
+        .over-summary-ovnum {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--gold);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .over-summary-balls {
+            display: flex;
+            gap: 4px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+        }
+
+        .over-summary-runs {
+            font-size: 13px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        /* ── Event player overlay ── */
+        .event-player-overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 52;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity .4s;
+        }
+
+        .event-player-overlay.show {
+            opacity: 1;
+        }
+
+        .epov-box {
+            background: linear-gradient(135deg, rgba(10, 8, 0, .97), rgba(20, 16, 0, .97));
+            border: 2px solid var(--gold);
+            border-radius: 14px;
+            padding: 24px 32px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 0 60px rgba(240, 180, 41, .2), 0 20px 60px rgba(0, 0, 0, .98);
+            min-width: 220px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .epov-box::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at center, rgba(240, 180, 41, .06) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .epov-id-wrap {
+            position: relative;
+            width: 100px;
+            height: 135px;
+            border-radius: 7px;
+            overflow: hidden;
+            flex-shrink: 0;
+            animation: epovCardIn .7s cubic-bezier(.36, .07, .19, .97) both;
+        }
+
+        @keyframes epovCardIn {
+            0% {
+                transform: scale(0.4) rotateY(-30deg);
+                opacity: 0
+            }
+
+            60% {
+                transform: scale(1.08) rotateY(4deg);
+                opacity: 1
+            }
+
+            80% {
+                transform: scale(0.97) rotateY(-2deg)
+            }
+
+            100% {
+                transform: scale(1) rotateY(0)
+            }
+        }
+
+        .epov-id-wrap .id-card-photo {
+            width: 100px;
+            height: 135px;
+            border: 2px solid var(--gold);
+            box-shadow: 0 0 20px rgba(240, 180, 41, .35);
+        }
+
+        .epov-id-wrap .id-card-photo.red {
+            border-color: #e63946;
+            box-shadow: 0 0 20px rgba(230, 57, 70, .4);
+        }
+
+        .epov-id-wrap .id-card-photo.purple {
+            border-color: #9b72cf;
+            box-shadow: 0 0 20px rgba(155, 114, 207, .4);
+        }
+
+        .epov-id-wrap .id-card-photo.blue {
+            border-color: #118ab2;
+            box-shadow: 0 0 20px rgba(17, 138, 178, .4);
+        }
+
+        .epov-id-accent {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--gold);
+        }
+
+        .epov-id-accent.red {
+            background: #e63946;
+        }
+
+        .epov-id-accent.purple {
+            background: #9b72cf;
+        }
+
+        .epov-id-accent.blue {
+            background: #118ab2;
+        }
+
+        .epov-emoji {
+            font-size: 38px;
+        }
+
+        .epov-name {
+            font-size: 22px;
+            font-weight: 900;
+            color: #fff;
+            letter-spacing: 1px;
+        }
+
+        .epov-stat {
+            font-size: 16px;
+            color: var(--gold);
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .epov-stat.red {
+            color: #ff8080;
+        }
+
+        .epov-stat.purple {
+            color: #c4a0ff;
+        }
+
+        .epov-stat.blue {
+            color: #7ec8ff;
+        }
+
+        .epov-sub {
+            font-size: 13px;
+            color: #888;
+        }
+
+        .epov-shine {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .08) 50%, transparent 70%);
+            animation: epovShine 2.5s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes epovShine {
+            0% {
+                transform: translateX(-120%)
+            }
+
+            100% {
+                transform: translateX(220%)
+            }
+        }
+
+        /* ── Win overlay ── */
+        .win-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 70;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse at center, rgba(30, 20, 0, .96) 0%, rgba(4, 4, 8, .98) 100%);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .6s;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .win-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .win-overlay-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            padding: 40px;
+            max-width: 720px;
+            width: 100%;
+        }
+
+        .win-trophy-big {
+            font-size: 100px;
+            animation: trophyMegaBounce 1s cubic-bezier(.36, .07, .19, .97) both;
+        }
+
+        @keyframes trophyMegaBounce {
+            0% {
+                transform: scale(0) rotate(-30deg);
+                opacity: 0
+            }
+
+            60% {
+                transform: scale(1.15) rotate(6deg);
+                opacity: 1
+            }
+
+            80% {
+                transform: scale(.94) rotate(-3deg)
+            }
+
+            100% {
+                transform: scale(1) rotate(0)
+            }
+        }
+
+        .win-overlay-title {
+            font-size: 58px;
+            font-weight: 900;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            text-shadow: 0 4px 30px rgba(240, 180, 41, .5);
+            text-align: center;
+        }
+
+        .win-overlay-sub {
+            font-size: 23px;
+            color: #ddd;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-align: center;
+        }
+
+        .win-overlay-detail {
+            font-size: 15px;
+            color: #888;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+
+        .win-overlay-players {
+            display: flex;
+            gap: 22px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .win-player-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+            animation: winCardDrop .6s cubic-bezier(.175, .885, .32, 1.275) both;
+        }
+
+        .win-player-card:nth-child(1) {
+            animation-delay: .1s;
+        }
+
+        .win-player-card:nth-child(2) {
+            animation-delay: .2s;
+        }
+
+        .win-player-card:nth-child(3) {
+            animation-delay: .3s;
+        }
+
+        @keyframes winCardDrop {
+            0% {
+                opacity: 0;
+                transform: translateY(-20px) scale(.8);
+            }
+
+            70% {
+                transform: translateY(4px) scale(1.04);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .win-id-wrap {
+            position: relative;
+            width: 95px;
+            height: 128px;
+            border-radius: 7px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .win-id-wrap .id-card-photo {
+            width: 95px;
+            height: 128px;
+            border: 2px solid var(--gold);
+            box-shadow: 0 0 18px rgba(240, 180, 41, .3);
+        }
+
+        .win-id-tag {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 3px 2px;
+            font-size: 9px;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            background: rgba(240, 180, 41, .88);
+            color: #000;
+        }
+
+        .win-id-tag.bowler {
+            background: rgba(6, 214, 160, .88);
+            color: #000;
+        }
+
+        .win-player-name {
+            font-size: 13px;
+            color: #ddd;
+            font-weight: 700;
+            margin-top: 6px;
+            text-align: center;
+            max-width: 100px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .win-player-stat {
+            font-size: 12px;
+            color: var(--gold);
+            text-align: center;
+            margin-top: 2px;
+        }
+
+        .win-confetti-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: -1;
+        }
+
+        .wc-bit {
+            position: absolute;
+            width: 10px;
+            border-radius: 2px;
+            animation: wcfall linear forwards;
+            opacity: 0;
+        }
+
+        @keyframes wcfall {
+            0% {
+                opacity: 1;
+                transform: translateY(-40px) rotate(0deg);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(110vh) rotate(720deg);
+            }
+        }
+
+        .win-celebration-emojis {
+            display: flex;
+            gap: 20px;
+            font-size: 36px;
+            animation: floatUpDown 2s ease-in-out infinite alternate;
+            margin-top: 8px;
+        }
+
+        @keyframes floatUpDown {
+            0% {
+                transform: translateY(0)
+            }
+
+            100% {
+                transform: translateY(-12px)
+            }
+        }
+
+        .confetti-burst {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 69;
+            overflow: hidden;
+        }
+
+        .cb-dot {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: cbFly ease-out forwards;
+            opacity: 0;
+        }
+
+        @keyframes cbFly {
+            0% {
+                opacity: 1;
+                transform: translate(0, 0) scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translate(var(--tx), var(--ty)) scale(0);
+            }
+        }
+    </style>
+<style>
+html.scorebar-only, html.scorebar-only body { background: transparent !important; overflow: hidden !important; }
+html.scorebar-only body > *:not(#sbWrap) { display: none !important; }
+html.scorebar-only #sbWrap {
+  display:flex !important;
+  width:100vw !important;
+  max-width:none !important;
+  left:0 !important;
+  bottom:0 !important;
+  transform:none !important;
+  filter:none !important;
+}
+html.scorebar-only #scoreBar { width:100% !important; height:96px; border-radius:0; }
+html.scorebar-only .sb-wrap { transition:none; }
+</style>
+</head>
+
+<body>
+
+    <button id="audioBtn" title="Toggle commentary audio" onclick="toggleAudio()">
+        <span class="ab-icon" id="abIcon">🔇</span>
+    </button>
+
+    <div id="loadingShim"></div>
+
+    <!-- Commentary Ticker — minimal, above score bar -->
+    <div id="commentaryTicker">
+        <div class="ticker-inner">
+            <span class="ticker-badge" id="tickerBadge">LIVE</span>
+            <span class="ticker-text" id="tickerText">Welcome to live coverage…</span>
+        </div>
+    </div>
+
+    <div class="ann-rain" id="annRain"></div>
+    <div class="ann-wrap" id="annWrap">
+        <div class="ann-toast" id="annToast">
+            <div class="ann-particles" id="annParticles"></div>
+            <div class="ann-emoji-ring" id="annEmojiRing">
+                <div class="ann-emoji" id="annEmoji">🏆</div>
+            </div>
+            <div class="ann-body">
+                <div class="ann-text" id="annText">CENTURY!</div>
+                <div class="ann-sub" id="annSub">100 runs off the bat!</div>
+                <div class="ann-floaters" id="annFloaters"></div>
+            </div>
+            <div class="ann-progress" id="annProgress"></div>
+        </div>
+    </div>
+
+    <div class="over-badge" id="overBadge">⬜ END OF OVER</div>
+
+    <div class="over-players-wrap" id="overPlayersWrap">
+        <div class="over-players-box">
+            <div style="flex:1">
+                <div class="over-players-title">End of Over</div>
+                <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+                    <div class="over-player-card" id="opStriker">
+                        <div class="over-id-wrap striker" id="opStrikerWrap">
+                            <img class="id-card-photo" id="opStrikerPhoto" src="" alt="">
+                            <div class="over-id-role striker">● Striker</div>
+                        </div>
+                        <div class="over-player-name" id="opStrikerName">—</div>
+                        <div class="over-player-stat" id="opStrikerStat">0(0)</div>
+                    </div>
+                    <div class="over-player-card" id="opNonStriker">
+                        <div class="over-id-wrap nonstriker" id="opNonStrikerWrap">
+                            <img class="id-card-photo" id="opNonStrikerPhoto" src="" alt="">
+                            <div class="over-id-role nonstriker">Non-Striker</div>
+                        </div>
+                        <div class="over-player-name" id="opNonStrikerName">—</div>
+                        <div class="over-player-stat" id="opNonStrikerStat">0(0)</div>
+                    </div>
+                    <div class="over-divider"></div>
+                    <div class="over-player-card" id="opBowler">
+                        <div class="over-id-wrap bowler" id="opBowlerWrap">
+                            <img class="id-card-photo" id="opBowlerPhoto" src="" alt="">
+                            <div class="over-id-role bowler">Bowler</div>
+                        </div>
+                        <div class="over-player-name" id="opBowlerName">—</div>
+                        <div class="over-player-stat" id="opBowlerStat">0-0</div>
+                    </div>
+                </div>
+            </div>
+            <div class="over-summary" id="overSummaryPanel">
+                <div class="over-summary-ovnum" id="overSummaryOvNum">OVER 0</div>
+                <div class="over-summary-balls" id="overSummaryBalls"></div>
+                <div class="over-summary-runs" id="overSummaryRuns"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="event-player-overlay" id="eventPlayerOverlay">
+        <div class="epov-box" id="epovBox">
+            <div class="epov-shine"></div>
+            <div class="epov-emoji" id="epovEmoji">🏆</div>
+            <div class="epov-id-wrap" id="epovIdWrap">
+                <img class="id-card-photo" id="epovPhoto" src="" alt="">
+                <div class="epov-id-accent" id="epovIdAccent"></div>
+            </div>
+            <div class="epov-name" id="epovName">Player</div>
+            <div class="epov-stat" id="epovStat">100 runs</div>
+            <div class="epov-sub" id="epovSub"></div>
+        </div>
+    </div>
+
+    <div class="win-overlay" id="winOverlay">
+        <div class="confetti-burst" id="confettiBurst"></div>
+        <div class="win-overlay-content">
+            <div class="win-trophy-big">🏆</div>
+            <div class="win-overlay-title" id="winOverlayTitle">TEAM WIN!</div>
+            <div class="win-overlay-sub" id="winOverlaySub">Won by X wickets</div>
+            <div class="win-overlay-detail" id="winOverlayDetail"></div>
+            <div class="win-celebration-emojis">🎉 🔥 🏆 ✨ 🎊 🥇 🌟 🎆</div>
+            <div class="win-overlay-players" id="winOverlayPlayers"></div>
+        </div>
+    </div>
+
+    <!-- SCORE BAR -->
+    <div class="sb-wrap" id="sbWrap">
+        <div class="sb-badges">
+            <div id="tgtBadge" class="tgt-badge">TARGET <span id="dTgt">0</span> · NEED <span id="dNeed">0</span> OFF
+                <span id="dNeedOv">0</span></div>
+            <div id="fhBadge" class="fh-badge">🟠 FREE HIT</div>
+        </div>
+        <div class="score-bar" id="scoreBar">
+            <div class="sb-team">
+                <div class="sb-tm-name" id="dTeam">TEAM</div>
+                <div class="sb-score">
+                    <span id="dRuns">0</span>
+                    <span class="sb-score-wkts">/<span id="dWkts">0</span></span>
+                    <span class="sb-score-ovs">(<span id="dOvs">0.0</span>)</span>
+                </div>
+            </div>
+            <div class="sb-bat">
+                <div id="p1box" class="bat-row">
+                    <img class="bat-row-photo" id="sbP1Photo" src="" alt="">
+                    <span class="bat-name" id="dP1n">Bat 1</span>
+                    <span class="bat-stat"><span id="dP1r">0</span><span class="sb">(<span
+                                id="dP1b">0</span>)</span></span>
+                </div>
+                <div id="p2box" class="bat-row">
+                    <img class="bat-row-photo" id="sbP2Photo" src="" alt="">
+                    <span class="bat-name" id="dP2n">Bat 2</span>
+                    <span class="bat-stat"><span id="dP2r">0</span><span class="sb">(<span
+                                id="dP2b">0</span>)</span></span>
+                </div>
+            </div>
+            <div class="sb-bwl">
+                <div class="sb-bwl-inner">
+                    <div class="sb-bwl-text">
+                        <div class="bwl-name" id="dBwn">Bowler</div>
+                        <div class="bwl-stat"><span id="dBww">0</span>-<span id="dBwr">0</span> <span
+                                class="bwl-ov">(<span id="dBwb">0.0</span>)</span></div>
+                        <div class="og" id="og"></div>
+                    </div>
+                    <img class="sb-bwl-photo" id="sbBwlPhoto" src="" alt="">
+                </div>
+            </div>
+        </div>
+        <div class="rates">
+            <div class="ri">CRR <b id="dCRR">0.00</b></div>
+            <div class="ri ri-rrr" id="rrrWrap" style="display:none">RRR <b id="dRRR">0.00</b></div>
+            <div class="ri ri-inn" id="inn1Wrap" style="display:none"><b id="dInn1"></b></div>
+        </div>
+    </div>
+
+    <!-- SCORECARD -->
+    <div class="sc-wrap hidden" id="scWrap">
+        <div class="sc-auto-bar" id="scAutoBar">
+            <div class="sc-auto-bar-fill" id="scAutoBarFill"></div>
+        </div>
+        <div class="sc-team-hdr" id="scTeamHdr">
+            <div class="sc-hdr-color" id="scHdrColor"></div>
+            <div class="sc-hdr-main" id="scHdrMain">
+                <div>
+                    <div class="sc-team-name" id="scTeamName">TEAM</div>
+                    <div class="sc-tournament" id="scTournament">LIVE SCORECARD</div>
+                </div>
+                <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+                    <div class="live-badge">● LIVE</div>
+                    <span style="font-size:12px;color:rgba(255,255,255,.5);letter-spacing:1px" id="scInnLbl">1ST
+                        INNINGS</span>
+                </div>
+            </div>
+            <div class="sc-hdr-right">
+                <div>
+                    <div class="sc-total-lbl">Score</div>
+                    <div class="sc-total-val" id="scTotalVal">0/0</div>
+                    <div class="sc-total-detail" id="scTotalDetail">OVERS 0.0</div>
+                </div>
+            </div>
+        </div>
+        <div class="sc-tabs">
+            <div class="sc-tab active" id="tabBat" onclick="setTab('bat')">🏏 Batting</div>
+            <div class="sc-tab" id="tabBwl" onclick="setTab('bwl')">⚾ Bowling</div>
+        </div>
+        <div class="need-bar" id="needBar">TARGET <span id="scTgtV">0</span> &nbsp;·&nbsp; NEED <span
+                id="scNdV">0</span> OFF <span id="scNdOvV">0</span> &nbsp;·&nbsp; RRR <span id="scRRRV">—</span></div>
+        <div id="panBat" class="sc-body">
+            <div class="sc-col-hdr bat-hdr">
+                <span></span><span>Batsman</span><span style="text-align:left">How Out</span>
+                <span>R</span><span>B</span><span>4s</span><span>6s</span><span>SR</span>
+            </div>
+            <div id="scBatRows"></div>
+            <div class="sc-fow" id="scFow">
+                <span class="sc-fow-lbl">Fall of Wickets</span>
+                <span style="color:#555;font-style:italic;font-size:12px">—</span>
+            </div>
+            <div class="sc-footer">
+                <div class="sc-footer-cell"><span class="sc-footer-lbl">Extras</span><span class="sc-footer-val"
+                        id="scExtVal">0</span></div>
+                <div class="sc-footer-cell"><span class="sc-footer-lbl">Overs</span><span class="sc-footer-val"
+                        id="scOvVal">0.0</span></div>
+                <div class="sc-footer-cell"><span class="sc-footer-lbl">CRR</span><span class="sc-footer-val"
+                        id="scCRRVal">0.00</span></div>
+                <div class="sc-footer-cell"><span class="sc-footer-lbl">Total</span><span class="sc-footer-val gold"
+                        id="scTotFooter">0/0</span></div>
+            </div>
+        </div>
+        <div id="panBwl" class="sc-body" style="display:none">
+            <div class="sc-team-hdr sc-bowl-hdr" style="flex-shrink:0">
+                <div class="sc-hdr-color" id="scBowlHdrColor"></div>
+                <div class="sc-hdr-main" id="scBowlHdrMain">
+                    <div>
+                        <div class="sc-team-name" id="scBowlTeamName">BOWLING TEAM</div>
+                        <div class="sc-tournament">Bowling Figures</div>
+                    </div>
+                </div>
+            </div>
+            <div class="sc-col-hdr" style="flex-shrink:0">
+                <span>Bowler</span><span>O</span><span>M</span><span>R</span><span>W</span><span>ECON</span>
+            </div>
+            <div id="scBwlRows"></div>
+            <div class="sc-footer" style="grid-template-columns:1fr 1fr 1fr">
+                <div class="sc-footer-cell"><span class="sc-footer-lbl">Extras (Wd+Nb)</span><span class="sc-footer-val"
+                        id="scBwlExt">0</span></div>
+                <div class="sc-footer-cell"><span class="sc-footer-lbl">Overs</span><span class="sc-footer-val"
+                        id="scBwlOv">0.0</span></div>
+                <div class="sc-footer-cell"><span class="sc-footer-lbl">Total</span><span class="sc-footer-val gold"
+                        id="scBwlTotal">0/0</span></div>
+            </div>
+        </div>
+        <div class="kbd-hint"><span>S</span> SCORECARD &nbsp; <span>B</span> SCORE BAR &nbsp; <span>1</span> BATTING
+            &nbsp; <span>2</span> BOWLING</div>
+    </div>
+
+    <script type="module">
+        /* ══════════════════════════════════════════════════════════════════
+           CRICKET OVERLAY — AI COMMENTARY ENGINE v4.0
+           300+ unique ball-by-ball lines · Queue-based speech · Persistent state
+           ══════════════════════════════════════════════════════════════════ */
+
+        // ── Audio State (persisted via localStorage) ───────────────────
+        const LS_AUDIO_KEY = 'cricket_overlay_audio_v1';
+        let _audioOn = localStorage.getItem(LS_AUDIO_KEY) !== '0'; // default ON
+        let _audioCtx = null;
+        let _ttsVoice = null;
+        let _ttsRate = 1.0;
+        let _ttsPitch = 1.1;
+        let _voicesLoaded = false;
+
+        // ── Speech Synthesis Queue ─────────────────────────────────────
+        const _speechQ = [];
+        let _speaking = false;
+        let _speechTimer = null;
+
+        function enqueueSpeech(text) {
+            if (!_audioOn || !text || !window.speechSynthesis) return;
+            // Don't flood queue — limit to 2 pending
+            if (_speechQ.length >= 2) _speechQ.shift();
+            _speechQ.push(text);
+            _drainSpeechQ();
+        }
+
+        function _drainSpeechQ() {
+            if (_speaking || !_speechQ.length || !window.speechSynthesis) return;
+            _speaking = true;
+            const text = _speechQ.shift();
+            window.speechSynthesis.cancel();
+            const utt = new SpeechSynthesisUtterance(text);
+            _applyVoiceSettings(utt);
+            utt.onend = () => { _speaking = false; setTimeout(_drainSpeechQ, 100); };
+            utt.onerror = () => { _speaking = false; setTimeout(_drainSpeechQ, 200); };
+            // Workaround for Chrome bug where synth gets stuck
+            clearTimeout(_speechTimer);
+            _speechTimer = setTimeout(() => {
+                if (_speaking) { _speaking = false; window.speechSynthesis.cancel(); _drainSpeechQ(); }
+            }, 15000);
+            window.speechSynthesis.speak(utt);
+        }
+
+        function _applyVoiceSettings(utt) {
+            if (_ttsVoice) utt.voice = _ttsVoice;
+            utt.rate = _ttsRate;
+            utt.pitch = _ttsPitch;
+            utt.volume = 0.95;
+        }
+
+        function clearSpeechQ() {
+            _speechQ.length = 0;
+            _speaking = false;
+            clearTimeout(_speechTimer);
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+        }
+
+        // ── Load / Match Voices ────────────────────────────────────────
+        function loadVoices(preferName) {
+            if (!window.speechSynthesis) return;
+            const voices = window.speechSynthesis.getVoices();
+            if (!voices.length) return;
+            _voicesLoaded = true;
+            if (preferName) {
+                const decoded = decodeURIComponent(preferName);
+                const found = voices.find(v => v.name === decoded);
+                if (found) { _ttsVoice = found; return; }
+            }
+            // Auto-select: prefer UK English, then any English
+            const ukMale = voices.find(v => v.lang === 'en-GB' && /male|george|daniel/i.test(v.name));
+            const anyEng = voices.find(v => v.lang.startsWith('en'));
+            _ttsVoice = ukMale || anyEng || voices[0] || null;
+        }
+
+        if (window.speechSynthesis) {
+            window.speechSynthesis.onvoiceschanged = () => loadVoices();
+            loadVoices();
+        }
+
+        // ── Audio UI ───────────────────────────────────────────────────
+        function syncAudioUI() {
+            const btn = document.getElementById('audioBtn');
+            const icon = document.getElementById('abIcon');
+            if (_audioOn) {
+                btn.classList.add('active');
+                icon.textContent = '🔊';
+                btn.title = 'Commentary ON — click to mute';
+            } else {
+                btn.classList.remove('active');
+                icon.textContent = '🔇';
+                btn.title = 'Commentary OFF — click to enable';
+            }
+            localStorage.setItem(LS_AUDIO_KEY, _audioOn ? '1' : '0');
+        }
+
+        window.toggleAudio = function () {
+            _audioOn = !_audioOn;
+            syncAudioUI();
+            if (_audioOn) {
+                try { if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); _audioCtx.resume(); } catch (e) { }
+                loadVoices();
+                playAnnounce();
+            } else {
+                clearSpeechQ();
+            }
+        };
+
+        // Init audio UI state on page load
+        syncAudioUI();
+
+        // ── Tone Generator ─────────────────────────────────────────────
+        function getAudioCtx() {
+            if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            return _audioCtx;
+        }
+        function playTone(freqs, durations, types, vol = 0.16) {
+            if (!_audioOn) return;
+            try {
+                const ctx = getAudioCtx();
+                freqs.forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
+                    osc.type = types[i] || 'sine';
+                    osc.frequency.value = freq;
+                    const t = ctx.currentTime + durations.slice(0, i).reduce((a, b) => a + b, 0);
+                    gain.gain.setValueAtTime(0, t);
+                    gain.gain.linearRampToValueAtTime(vol, t + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + durations[i] - 0.01);
+                    osc.start(t); osc.stop(t + durations[i]);
+                });
+            } catch (e) { }
+        }
+        function playWicket() { playTone([180, 140, 100], [.12, .14, .2], ['sawtooth', 'sawtooth', 'sawtooth'], .22); setTimeout(() => playTone([320, 220], [.08, .18], ['square', 'square'], .12), 80); }
+        function playSix() { playTone([523, 659, 784, 1047], [.1, .1, .1, .28], ['sine', 'sine', 'sine', 'sine'], .18); setTimeout(() => playTone([1047, 1319], [.08, .22], ['triangle', 'triangle'], .1), 360); }
+        function playFour() { playTone([440, 554, 659], [.08, .08, .2], ['sine', 'sine', 'sine'], .16); }
+        function playFifty() { playTone([523, 659, 784, 523, 784], [.09, .09, .09, .09, .22], ['triangle', 'triangle', 'triangle', 'triangle', 'triangle'], .15); }
+        function playCentury() { playTone([523, 659, 784, 1047, 784, 1047, 1319], [.09, .09, .09, .09, .09, .09, .32], ['sine', 'sine', 'sine', 'sine', 'sine', 'sine', 'sine'], .18); }
+        function playWin() { playTone([523, 659, 784, 1047, 1319], [.15, .15, .15, .15, .5], ['triangle', 'triangle', 'triangle', 'triangle', 'triangle'], .15); setTimeout(() => playTone([784, 1047, 1319, 1568], [.1, .1, .1, .55], ['sine', 'sine', 'sine', 'sine'], .12), 700); }
+        function playAnnounce() { playTone([880, 1108, 1320], [.1, .1, .22], ['sine', 'sine', 'sine'], .13); }
+        function playOverEnd() { playTone([659, 659], [.12, .14], ['triangle', 'triangle'], .13); setTimeout(() => playTone([880, 880], [.1, .16], ['triangle', 'triangle'], .11), 300); }
+
+        /* ══════════════════════════════════════════════════════════════════
+           AI COMMENTARY ENGINE — 300+ UNIQUE LINES
+           All events: dot, 1-6, wicket, wide, noball, freehit, bye, legbye,
+           powerplay, death, lastover, dots3+, dots5+, chase pressure/easy,
+           partnership milestones, player milestones, fifer, hattrick, win
+           ══════════════════════════════════════════════════════════════════ */
+
+        const C = {
+
+            // ── DOT BALLS (32 lines) ──────────────────────────────────────
+            dot: [
+                "{bowler} hits a tight length — {striker} defends solidly back down the wicket. Dot ball.",
+                "Good shape from {bowler}, {striker} can only push it to mid-on. No run.",
+                "Nipped back off the seam! {striker} barely kept it out — dot ball.",
+                "Tight line from {bowler}. {striker} watchful, plays it safely to square leg.",
+                "{striker} pushes to cover — fielder swoops in immediately. No run taken.",
+                "Maiden ball — {bowler} testing {striker} outside off. Nothing doing.",
+                "Short of a length and rising. {striker} sways away, zips through to the keeper.",
+                "{striker} taps it back to {bowler} — simple return catch on offer, left alone.",
+                "Lovely away movement! {striker} played at it but the ball kissed the outside edge safely.",
+                "{bowler} bowls a well-disguised slower ball. {striker} checks the drive. Dot.",
+                "Tight bowling here. {striker} smothers the ball and returns it down the track.",
+                "Pitched on middle, {striker} plays down the line straight to mid-on. No run.",
+                "{bowler} bowls well outside off. {striker} wisely leaves it alone. Good discipline.",
+                "Bouncer from {bowler}! {striker} ducks under it brilliantly — dot ball.",
+                "Oh, that beat the outside edge! {bowler} generating real movement here.",
+                "Pushed to cover point and sent back immediately. No run available.",
+                "Tidy bowling. {bowler} lands it on a perfect length — {striker} has no options.",
+                "Kept out! {bowler} gets one to rear up sharply — {striker} takes it on the body.",
+                "{striker} tries to work it through midwicket but the ball skids on — dot.",
+                "Defended off the front foot — straight to {bowler}. Clean dot ball.",
+                "{bowler} gets serious shape. {striker} shoulders arms — good decision leaving that one.",
+                "Played straight back down the wicket. No run, tidy from both sides.",
+                "Drawn forward by {bowler}. {striker} plays it with soft hands — fielded at mid-on.",
+                "Cracking delivery! Full and swinging late — {striker} can only dig it out.",
+                "Big appeal for lbw! Not out, but that was close — dot ball, {bowler} smiling.",
+                "Dot ball. {bowler} keeping a relentless pressure on {striker} right now.",
+                "Solid defence from {striker} — the bat came down straight and true. No run.",
+                "Pushed off the back foot to point — fielder covers quickly. Dot.",
+                "{bowler} floats one up — {striker} reads it and plays it back carefully. Dot.",
+                "Fine piece of bowling. Dot ball — the pressure dial cranks up another notch.",
+                "Not much room offered there. {striker} jabs at it into the off side, no run.",
+                "Clean dot ball. {bowler} is finding superb rhythm in this spell.",
+            ],
+
+            // ── 1 RUN (18 lines) ──────────────────────────────────────────
+            one: [
+                "Single to {striker} — tapped to mid-off and they run through quickly.",
+                "One run. Pushed to extra cover, a sharp single — {striker} crosses.",
+                "{striker} clips it to square leg. Strike changes. Scoreboard ticking.",
+                "Worked off the hip to fine leg — easy single for {striker}.",
+                "Flicked to midwicket, yes called confidently — one run, strike changes.",
+                "One run — {striker} presses forward and taps to short cover, scampers through.",
+                "Played to third man — they trot through for a comfortable single.",
+                "Dab to third man. One run — {striker} keeps things moving.",
+                "{striker} guides it to point. Fielder misfields slightly — single taken!",
+                "Nudged off the hip to fine leg. Simple single, baton passes to {nonStriker}.",
+                "Cheeky single — {striker} pushes to mid-on and calls immediately. Clever running.",
+                "One run and the partnership continues to build. Smart cricket.",
+                "Rotated to leg side — one run. {striker} and {nonStriker} in good communication.",
+                "Pushed past mid-off — one run and strike rotated. Keeping the pressure off.",
+                "Soft hands to backward point — single taken. Sensible, steady batting.",
+                "One run. {striker} uses the pace off the ball and dabs it to third man.",
+                "Steered to third man — comfortable single. Good game awareness from {striker}.",
+                "Gently pushed to cover — run taken smartly. One run, strike transferred.",
+            ],
+
+            // ── 2 RUNS (14 lines) ─────────────────────────────────────────
+            two: [
+                "Two runs! Punched through the gap at cover — excellent running.",
+                "Driven to long-on, two runs! Timed it well and they scamper back for the second.",
+                "Two! {striker} finds the gap at deep midwicket and they push hard.",
+                "Guided to third man — two runs. Throw comes in but they're home comfortably.",
+                "Flicked off the pads — two runs to fine leg. Gorgeous timing from {striker}.",
+                "Two runs — {striker} punches through the covers and they turn sharply.",
+                "Worked to deep backward square — two comfortable runs. Running is excellent.",
+                "Two! Short ball, {striker} pulls it to deep square — the fielder cuts it off well.",
+                "Driven into the gap past mid-on — two runs and they're running beautifully.",
+                "Glanced off the pads — two runs to fine leg. Great awareness from {striker}.",
+                "Two through midwicket! {striker} plays it early and finds the gap perfectly.",
+                "Excellent placement! {striker} threads it through cover-point — two runs.",
+                "Two runs — the throw misses the stumps! They've taken an extra from the overthrow.",
+                "Pushed to long-off — two runs scampered quickly. Good running between the wickets.",
+            ],
+
+            // ── 3 RUNS (9 lines) ──────────────────────────────────────────
+            three: [
+                "Three runs! Hit hard to deep square leg and they sprint brilliantly for three!",
+                "Three runs — the fielder fumbles at the boundary and they push for a third!",
+                "Excellent running between the wickets! {striker} and {nonStriker} steal three!",
+                "Three! Hit to deep midwicket, the fielder slides to save the boundary — three runs!",
+                "Three runs! The throw comes in slowly and they've crossed for a third. Alert running.",
+                "Three runs taken off an overthrow! Chaos in the field — {batTeam} take full advantage.",
+                "Driven powerfully to long-on and they've come back for three. Terrific cricket.",
+                "Three! Misfield at deep point lets them scamper back for an extra run. Sharp work.",
+                "Outstanding running — three runs! {striker} never stopped calling and they've got three.",
+            ],
+
+            // ── FOUR — BOUNDARY (38 lines) ────────────────────────────────
+            four: [
+                "FOUR! {striker} drives through the covers — gorgeous shot, races to the boundary!",
+                "FOUR RUNS! {striker} cuts it late and it speeds past point! Shot of the innings!",
+                "BOUNDARY! {striker} flicks it off the hip and beats fine leg all ends up!",
+                "FOUR! Lovely sweep from {striker} — gets down on one knee and sweeps it fine!",
+                "Elegant drive through mid-off — FOUR! {striker} is timing the ball sublimely!",
+                "BOUNDARY! {striker} lofts over mid-on, pitches and races away to the fence!",
+                "FOUR! {striker} pulls it powerfully from short of a length — gets right on top of it!",
+                "OFF THE PADS and away to the fine-leg fence — FOUR! That was all pace.",
+                "FOUR! Driven through the gap — cover fieldsman had absolutely no chance.",
+                "FOUR! Reverse sweep from {striker}! Audacious, inventive, brilliant — and it comes off!",
+                "Carved over point — FOUR! {striker} opens the face of the bat and threads it away.",
+                "FOUR RUNS! Back-foot punch through the covers — {striker} in supreme touch.",
+                "Edged — but it flies away to the third-man fence! Lucky, but all four count.",
+                "BOUNDARY! Short and wide from {bowler} and {striker} cuts with real authority!",
+                "FOUR! {striker} gets under it and drives wide of mid-on — glorious follow-through.",
+                "FOUR! The pull shot — short ball, {striker} swivels and dispatches it to square leg!",
+                "BOUNDARY! Delicate glance off the back of a length. Fine leg was too square.",
+                "FOUR! Whipped through midwicket — pure timing from {striker}. No need for power.",
+                "FOUR RUNS! Inside edge and it rockets to the fine-leg fence — {striker} will take it!",
+                "BOUNDARY! Upper cut over point — {striker} manufacturing the shot on a short ball.",
+                "FOUR! Flipped over midwicket off a full toss — {striker} doesn't miss those.",
+                "FOUR! {striker} dances down the track and drives it back past the bowler beautifully.",
+                "FOUR! Late cut executed to perfection — the ball splits two fielders and races away.",
+                "BOUNDARY! {striker} drives on the up through extra cover. Stunning shot!",
+                "FOUR! Paddle sweep — {striker} gets down early and it trickles to the fine-leg rope.",
+                "FOUR RUNS! Driven straight — {bowler} gets out of the way just in time!",
+                "BOUNDARY! Pulled in front of square — {striker} got into the right position perfectly.",
+                "FOUR! Off the top edge but it still goes over the keeper's head and away!",
+                "FOUR! {striker} waits on it, waits, and then — guides it to third man effortlessly.",
+                "BOUNDARY! Back-cut over point — {striker} rocked back and punched it crisply.",
+                "FOUR! Sweetly timed flick over midwicket — the fielder didn't move a muscle.",
+                "FOUR RUNS! The lofted drive clears mid-off by a fraction and rolls to the rope!",
+                "BOUNDARY! Full toss, {striker} clubs it through covers — {bowler} will regret that.",
+                "FOUR! Glorious cover drive — all the way along the turf to the boundary rope!",
+                "FOUR! Flicked from outside off through square leg — unconventional and brilliant.",
+                "BOUNDARY! Scything cut through point — the crowd rise to applaud that one.",
+                "FOUR! Driven through extra cover on the up — {striker} is finding the middle consistently.",
+                "FOUR RUNS! Ramp shot over slip — it runs away to the third-man boundary!",
+            ],
+
+            // ── SIX — MAXIMUM (38 lines) ──────────────────────────────────
+            six: [
+                "SIX! {striker} launches it over long-on — ball disappears into the stands!",
+                "MAXIMUM! {striker} gets under it and lifts it high and handsome over midwicket!",
+                "SIX! Straight back over {bowler}'s head — massive hit, gets enormous distance!",
+                "SIX RUNS! {striker} reverse-scoops it over fine leg — outrageous shot!",
+                "CLEARED THE ROPE! {striker} shuffles and slog-sweeps — phenomenal six!",
+                "SIX! Smashed back down the ground — {striker} got hold of that completely!",
+                "MAXIMUM! Dispatched over wide long-on — {striker} puts everything through it!",
+                "SIX! {striker} charges {bowler} and lofts it effortlessly over long-off!",
+                "SIX! Hit so cleanly — {striker} barely looked like they were trying!",
+                "SIX! Standing tall and pulling from outside off — way back into the crowd!",
+                "OVER THE BOUNDARY! Massive blow — that cleared the rope by an enormous margin!",
+                "SIX RUNS! Not in the slot at all but {striker} manufactured that shot perfectly!",
+                "THAT'S INTO THE CROWD! {striker} times it to perfection — sails over long-on!",
+                "SIX! Steps down the track and drives it with absolute disdain — ten rows back!",
+                "SIX! The big hit — {striker} gets under it and watches it sail away!",
+                "SIX! Smashed over wide long-on — {striker} using incredible strength and timing!",
+                "MAXIMUM! Swept powerfully over deep square — the fielder could only watch!",
+                "SIX! Inside out over extra cover — wonderful footwork, wonderful timing, wonderful shot!",
+                "HUGE SIX! Ramp over the keeper — no fielder within fifty metres of it!",
+                "SIX! Flipped over fine leg — {striker} gets on one knee and shovels it away!",
+                "SIX RUNS! That is absolutely enormous — the ball is still going!",
+                "MAXIMUM! {striker} picks up a short ball and pulls it ferociously over square leg!",
+                "SIX! Driven back over {bowler}'s head — cheeky, direct, and devastating!",
+                "SIX! Walked across the stumps and slogged it — straight over midwicket!",
+                "MAXIMUM! Lofted over long-off — {striker} made that look ridiculously easy!",
+                "SIX! Top-edged over the keeper — didn't even get hold of it, still six!",
+                "SIX RUNS! That's out of the stadium! {striker} has hit it a country mile!",
+                "MAXIMUM! Stepped away and carved it over the off side — six!",
+                "SIX! Short and {striker} pulls it over fine leg — perfectly placed!",
+                "SIX! Came down the track, got to the pitch of it and lifted it classily over long-off!",
+                "THAT'S A MAXIMUM! {bowler} is shell-shocked! What an incredible stroke!",
+                "SIX! The helicopter shot! {striker} flicks it over fine leg in extraordinary style!",
+                "MAXIMUM SIX! Dropped his wrists and scooped it — genius cricket from {striker}!",
+                "SIX! Driven imperiously back over the bowler's head — don't bother retrieving that.",
+                "SIX RUNS! That went like a rocket — {striker} in an entirely different league today!",
+                "MAXIMUM! Back-foot punch over point — where did that power come from?",
+                "SIX! Flat, fast, over long-on — {striker} swung and it stayed low and cleared!",
+                "SIX RUNS! {striker} has launched {bowler} out of the attack with that missile!",
+            ],
+
+            // ── WICKET (32 lines) ─────────────────────────────────────────
+            wicket: [
+                "OUT! {bowler} strikes — {striker} has to make that long walk back to the pavilion.",
+                "WICKET! {bowler} gets the breakthrough — {striker} is dismissed!",
+                "GONE! Massive wicket for {bowler} and the bowling side — {striker} departs.",
+                "HE'S OUT! {bowler} finds the edge and the fielder takes a sharp catch!",
+                "WICKET! {bowler} bowls {striker} around the legs — stumps shattered!",
+                "BOWLED! Clean bowled by {bowler} — that delivery was simply unplayable.",
+                "DISMISSED! What a ball from {bowler} — {striker} had absolutely no answer!",
+                "CAUGHT! {striker} throws the head back in disbelief — {bowler} gets the reward!",
+                "OUT! {striker} plays around the ball — plumb lbw! Very soft dismissal.",
+                "WICKET! {bowler} nips it back off the seam and that's out — magnificent delivery!",
+                "GONE! Run out — neither batter was in the crease! Superb fielding!",
+                "{striker} departs for {strikerRuns} — good innings brought to a sudden end.",
+                "OUT! The bouncer did the job for {bowler} — top edge and it's caught!",
+                "WICKET! Stumped — {striker} came down the pitch and missed it completely!",
+                "DISMISSED! {striker} goes for {strikerRuns} — crucial wicket at this stage of the game.",
+                "OUT! {bowler} bowled a ripper — full, fast, and late swing. {striker} had no chance.",
+                "WICKET! Caught at slip — probing line from {bowler} draws the edge. Gone!",
+                "OUT! Caught behind — {striker} nicked it driving and the keeper took it low.",
+                "WICKET! Caught at mid-on — {striker} mistimed the lofted drive. Crucial breakthrough!",
+                "GONE! Brilliant catch in the deep — {striker} got all of it but straight to the fielder.",
+                "OUT! Run out by a mile — terrible mix-up between the batters. One of them had to go.",
+                "WICKET! Googly from {bowler} beats {striker} completely — stumps hit!",
+                "OUT! Hit straight to square leg fielder — {striker} picked the fielder, not the gap.",
+                "DISMISSED! Reverse swing from {bowler} — {striker} plays across the line, bowled!",
+                "WICKET! Caught at long-on — {striker} hit it well but straight down the throat!",
+                "OUT! Brilliant caught and bowled from {bowler} — full stretch to his right!",
+                "WICKET! Caught at fine leg — the top edge from a pull shot. {bowler} strikes!",
+                "GONE! Hit wicket — {striker} stepped back into his stumps pulling. Bad luck!",
+                "OUT! The off-stump is pegged back! What a beauty from {bowler}!",
+                "WICKET! {striker} goes for a big one and is caught at long-off. Costly shot.",
+                "DISMISSED! Spin does the trick — {bowler} gets big turn and {striker} is caught at slip.",
+                "OUT! LBW — the ball crashes into the pad in front of middle stump. Plumb!",
+            ],
+
+            // ── WIDE (13 lines) ───────────────────────────────────────────
+            wide: [
+                "Wide! {bowler} strays too far outside off — one extra to {batTeam}.",
+                "Wide ball — {bowler} loses the line there. Penalty run added.",
+                "Wide! Goes down the leg side — {striker} couldn't get near it.",
+                "{bowler} sends down a wide. Umpire's arm extends immediately.",
+                "Called wide! {bowler} will be disappointed — drifted outside the tramlines.",
+                "Wide ball — extra run for {batTeam}. Costly from {bowler}.",
+                "Wide! Too short and too wide — not one to be proud of from {bowler}.",
+                "Wide ball — slipped out of the hand. One extra conceded there.",
+                "That's a wide — drifted too far to leg and the batsman couldn't reach it.",
+                "Wide! {bowler} overcooks the in-swinger and it sails to leg side. Easy call.",
+                "Called wide down leg — {striker} made no attempt, and rightly so.",
+                "Wide — that's a free run. {bowler} shakes his head in frustration.",
+                "Wide ball — well down the off side, the umpire's arm goes straight out.",
+            ],
+
+            // ── NO BALL (11 lines) ────────────────────────────────────────
+            noball: [
+                "No ball! {bowler} overstepped — extra run AND a FREE HIT to follow!",
+                "No ball! Front foot lands past the crease — FREE HIT for {striker} coming up!",
+                "Overstepped! {bowler} gives away a no ball — FREE HIT on the way!",
+                "No ball called! {batTeam} get a free run AND a free hit!",
+                "NO BALL! {bowler} oversteps — and the crowd knows what that means. FREE HIT!",
+                "The no-ball call is made — {bowler} has overstepped. FREE HIT next delivery!",
+                "No ball! The umpire signals — costly mistake from {bowler}. Free hit incoming!",
+                "No ball! {bowler} is over the line — one penalty run and a licence to attack!",
+                "That is a no ball — {bowler} a foot over the crease. FREE HIT for {striker}!",
+                "No ball! The replays confirm it — too far forward. Free hit to come!",
+                "No ball! That's a costly error from {bowler} — free run and free hit both gifted.",
+            ],
+
+            // ── FREE HIT (11 lines) ───────────────────────────────────────
+            freehit: [
+                "FREE HIT! {striker} can play any shot — only run-out can get them out here!",
+                "It's a FREE HIT! {bowler} under immense pressure — {striker} has absolute freedom!",
+                "FREE HIT DELIVERY! The crowd on their feet — anything can happen here!",
+                "FREE HIT! The pressure is entirely on {bowler} — {striker} can swing from the hip!",
+                "FREE HIT coming up! {striker} has a golden opportunity — absolutely nothing to lose!",
+                "The golden ball — FREE HIT! {striker} can attack without any fear of dismissal.",
+                "FREE HIT! Fields spread, pressure on {bowler} — {striker} should be looking for big!",
+                "Here comes the FREE HIT! {batTeam}'s batter has a licence to thrill!",
+                "FREE HIT delivery — the umpire signals it clearly. {striker} in the box seat!",
+                "FREE HIT! {bowler}'s nightmare. {striker}'s dream. Let's see what they do here.",
+                "FREE HIT! No fear of dismissal except run-out — {striker} must make this count.",
+            ],
+
+            // ── BYES (9 lines) ────────────────────────────────────────────
+            bye: [
+                "Byes! Ball beats bat AND the keeper — {batTeam} pick up the runs.",
+                "Byes signalled — ball went through to the fence! Keeper will be disappointed.",
+                "Byes! That took the inside edge and raced through. Runs on the board.",
+                "Byes — keeper misses it and they're running. Good awareness from the batters.",
+                "Ball beats the keeper! Byes awarded — {batTeam} take the runs.",
+                "Byes! The keeper dived but couldn't gather — they've crossed for the runs.",
+                "Wide enough that the keeper couldn't reach it — byes awarded. Extra runs.",
+                "Byes! Ball flicks the top of the stumps but {striker} gets out of the way in time.",
+                "Byes — slipped past the keeper down leg. Sharp running from {batTeam}.",
+            ],
+
+            // ── LEG BYES (9 lines) ────────────────────────────────────────
+            legbye: [
+                "Leg byes! Deflects off the thigh pad — they set off and get the runs.",
+                "Leg byes signalled by the umpire — off the pad and away to fine leg.",
+                "Off the pad and away — leg byes, {batTeam} keep the scoreboard ticking.",
+                "Leg byes! {striker} misses the flick but the deflection sends it to deep square.",
+                "Ball hits the pad, bounces away — leg byes awarded. Umpire signals correctly.",
+                "Off the back pad — leg byes. They run quickly and get two leg byes.",
+                "Leg byes! Missed the shot, ball hits the hip and deflects fine. Good running.",
+                "Struck on the thigh — they run the leg byes quickly. Umpire signals.",
+                "Leg byes — hit on the pad, rolled away on the off side. Extra runs taken.",
+            ],
+
+            // ── POWERPLAY (17 lines) ──────────────────────────────────────
+            powerplay: [
+                "We're in the powerplay — only two fielders outside the circle! Attack time!",
+                "Powerplay in effect — {batTeam} looking to capitalise on these fielding restrictions.",
+                "These powerplay overs could define the innings — {batTeam} must make them count.",
+                "In the powerplay — every boundary is golden. {striker} showing positive intent.",
+                "Powerplay cricket! The field is up — there are gaps everywhere for {striker} to exploit.",
+                "{batTeam} in the powerplay — the pitch is up for grabs. Who takes control?",
+                "Powerplay phase — {bowlTeam} looking for wickets, {batTeam} hunting boundaries.",
+                "The powerplay is a critical window. {striker} needs to set the tone here.",
+                "In the powerplay now — six fielders inside the circle. Room to manoeuvre.",
+                "Powerplay overs — {batTeam} must bank runs in this phase or the pressure builds.",
+                "These are the powerplay overs — the foundations of the innings are set right here.",
+                "Powerplay cricket! {bowler} trying to beat the bat while the field is up.",
+                "In the powerplay, every dot ball is precious. {bowler} knows it. {striker} knows it.",
+                "Powerplay — the battle between {striker} and {bowler} has the whole match watching.",
+                "Fielding restrictions — {batTeam} have the opportunity, now they need the execution.",
+                "Powerplay overs — the match is wide open. Everything to play for at this stage.",
+                "In the powerplay — maximum opportunity, maximum risk. Exciting phase of cricket.",
+            ],
+
+            // ── DEATH OVERS (16 lines) ────────────────────────────────────
+            death: [
+                "We're into the death overs — all-out attack now from {batTeam}!",
+                "Death overs! Every ball counts — {striker} looking to clear the ropes.",
+                "The final overs — pressure immense from both sides. Exciting cricket ahead!",
+                "These are the death overs — where nerves shred and matches are decided.",
+                "Last few overs and {batTeam} need to go big. {striker} under enormous pressure.",
+                "Death overs cricket — yorkers, bouncers, variations. Who blinks first?",
+                "Into the death now — the bowlers will be targeting the stumps. Watch for the yorker.",
+                "Death overs! {bowlTeam} trying to hold {batTeam} back. {batTeam} desperate to attack.",
+                "The death overs — the most dramatic phase of the game has arrived.",
+                "We're in the final stretch! {striker} needs to keep a cool head and play smart.",
+                "Death bowling — wide yorkers, slow bouncers, cutters. {bowler} has all the tools.",
+                "Death overs and the field goes out — can {striker} find the gaps?",
+                "Into the final overs — {batTeam} need big shots, {bowlTeam} need discipline.",
+                "Death overs! This is where the game will be won and lost. Incredible tension.",
+                "The death overs are here — {striker} knows they need to take risks now.",
+                "Final phase of the innings — raw nerves, high stakes. Don't miss a ball of this!",
+            ],
+
+            // ── LAST OVER (11 lines) ──────────────────────────────────────
+            lastover: [
+                "LAST OVER OF THE INNINGS! Everything on the line — every single ball matters!",
+                "It's the final over! The crowd is electric — {striker} needs to go absolutely big!",
+                "Last over! {batTeam} looking for maximum runs — {bowler} under enormous pressure.",
+                "Final over — six balls to define this innings. Who rises to the occasion?",
+                "THE LAST OVER IS HERE! This is it — six balls of pure cricket drama!",
+                "Last over! {batTeam}: whatever happens from here, make every ball count.",
+                "Six balls left. The last over. What a game this has been — don't blink!",
+                "FINAL OVER! The ground is buzzing — every delivery is now a match-defining moment.",
+                "Last over — can {striker} take {batTeam} to a big total? Let's find out together.",
+                "Six balls to go in this innings — everything is on the line right now.",
+                "Last over of the innings! Heroes and villains will be made in these six deliveries.",
+            ],
+
+            // ── CONSECUTIVE DOTS 3+ (13 lines) ────────────────────────────
+            dots3plus: [
+                "Three consecutive dot balls — {bowler} is really tying up {striker} here.",
+                "That's three dots in a row! Pressure building enormously on {batTeam}.",
+                "Dot, dot, dot — {bowler} is on a magnificent spell. {striker} struggling for room.",
+                "Can't buy a run! {bowler} keeping {striker} absolutely quiet — dot after dot!",
+                "Three dot balls in a row — the run rate is climbing and the pressure is mounting.",
+                "Three dots! {bowler} has found an exceptional rhythm — {striker} is in real trouble.",
+                "{striker} hasn't scored in three balls — {bowler} has completely shut them down!",
+                "Three consecutive dots! The required rate keeps climbing with every maiden ball.",
+                "Dot ball sequence from {bowler} — this is exactly what {bowlTeam} needed here.",
+                "{bowler} has bowled three dotty deliveries — this is world-class pressure bowling.",
+                "Three dots and the scoreboard is frozen — {bowler} is controlling this completely.",
+                "Back-to-back-to-back dots! {striker} needs a release ball desperately.",
+                "Three successive dot balls — this is suffocating bowling from {bowler}.",
+            ],
+
+            // ── CONSECUTIVE DOTS 5+ (9 lines) ─────────────────────────────
+            dots5plus: [
+                "FIVE dot balls in a row! This is incredible bowling from {bowler}! Phenomenal spell!",
+                "Five consecutive dots — {bowler} has {striker} completely tied down! Magnificent!",
+                "{striker} is in total crisis — five balls, zero runs, and the pressure is unbearable!",
+                "Five dots! {bowler} is bowling as well as anyone could right now — what a spell!",
+                "Five in a row without a run — this could be a maiden over from {bowler}!",
+                "{batTeam} need to break this stranglehold! Five dot balls in succession — extraordinary!",
+                "Five consecutive dots — the required rate spiralling. Something has to give soon.",
+                "{bowler} could be about to claim a maiden over — five balls gone, zero runs scored!",
+                "This is a stunning spell of bowling — five dot balls and {striker} looks completely lost.",
+            ],
+
+            // ── CHASE PRESSURE (17 lines) ─────────────────────────────────
+            pressure_chase: [
+                "Still {needed} needed off {ballsLeft} balls — that required rate is climbing fast!",
+                "{batTeam} need {needed} from {ballsLeft} balls. Can {striker} deliver under this pressure?",
+                "Required rate of {rrr} — this is a very tough ask for {batTeam} right now.",
+                "Every ball a battle — {batTeam} need boundaries to change this equation.",
+                "{needed} off {ballsLeft}? The math is tough, but {striker} is still at the crease.",
+                "The required rate keeps climbing — {batTeam} need a big over here urgently.",
+                "Need {needed} from {ballsLeft} balls — RRR is {rrr} now. It's getting away from them.",
+                "{batTeam} are in a real chase here — {needed} runs off the remaining {ballsLeft} balls.",
+                "The equation is getting tighter — {needed} needed, RRR now at {rrr}. Do they chase?",
+                "Chasing hard — {batTeam} need {needed} from {ballsLeft} and every single run matters.",
+                "The pressure is palpable — {needed} to win, {ballsLeft} balls left, RRR is {rrr}!",
+                "Time is running out for {batTeam} — {needed} needed off {ballsLeft} balls.",
+                "Required run rate {rrr} — this is a massive ask. {striker} needs to be extraordinary.",
+                "{batTeam} need boundaries and they need them NOW — {needed} off {ballsLeft} is massive.",
+                "The chase is in danger — {batTeam} must find a way to score {needed} from {ballsLeft}!",
+                "Required rate of {rrr} — it's tough but not impossible. {striker} to make the decision.",
+                "{needed} from {ballsLeft} balls — {batTeam} need something special here to win this game.",
+            ],
+
+            // ── EASY CHASE (11 lines) ─────────────────────────────────────
+            easy_chase: [
+                "{batTeam} firmly in control — just need to avoid any silly wickets from here.",
+                "Looking comfortable for {batTeam}. {needed} needed off {ballsLeft} — well on track.",
+                "{striker} and {nonStriker} have made this look quite straightforward. {batTeam} cruising.",
+                "{batTeam} well on top — should win this from here barring something extraordinary.",
+                "Very manageable now for {batTeam} — {needed} from {ballsLeft}. Stay calm, stay smart.",
+                "{batTeam} are cruising home — {needed} runs from {ballsLeft} balls. Game almost done.",
+                "In control — {batTeam} just need to play sensibly and the victory is theirs.",
+                "{batTeam} in the driver's seat. Required rate {rrr} — a very gentle chase.",
+                "Nice and smooth for {batTeam} — {needed} off {ballsLeft}. Simply no need to panic.",
+                "{batTeam} are coasting! Just need to bat sensibly for {ballsLeft} more balls.",
+                "The win is getting closer for {batTeam} — {needed} needed with {ballsLeft} to go.",
+            ],
+
+            // ── PARTNERSHIP 50 (7 lines) ──────────────────────────────────
+            partnership50: [
+                "50-run partnership! {striker} and {nonStriker} have put together a superb half-century stand!",
+                "Fifty for the partnership — excellent, patient cricket from {striker} and {nonStriker}!",
+                "{striker} and {nonStriker} bring up a fifty partnership! What a fine stand this has been.",
+                "Fifty-run stand — a really valuable partnership in the context of this innings.",
+                "PARTNERSHIP FIFTY! {striker} and {nonStriker} are in fine form together!",
+                "The partnership is fifty! {striker} and {nonStriker} have put together something special.",
+                "50-run stand! The pair of {striker} and {nonStriker} have stabilised this innings brilliantly.",
+            ],
+
+            // ── PARTNERSHIP 100 (7 lines) ─────────────────────────────────
+            partnership100: [
+                "CENTURY PARTNERSHIP! {striker} and {nonStriker} share a hundred-run stand — outstanding!",
+                "A hundred for the partnership! {striker} and {nonStriker} — what a magnificent stand!",
+                "ONE HUNDRED PARTNERSHIP RUN! {striker} and {nonStriker} — this is a match-winning contribution!",
+                "Hundred-run partnership — that's been absolutely pivotal. Brilliant batting from both.",
+                "PARTNERSHIP CENTURY! The crowd roars — {striker} and {nonStriker} have done it together!",
+                "100-run partnership! This stand has completely changed the complexion of the innings.",
+                "What a stand! A hundred runs for the partnership — {striker} and {nonStriker} are heroes!",
+            ],
+
+            // ── PARTNERSHIP 150 (5 lines) ─────────────────────────────────
+            partnership150: [
+                "150-run partnership! This is an extraordinary stand — {striker} and {nonStriker} are dominant!",
+                "A hundred and fifty together! {striker} and {nonStriker} have batted {bowlTeam} out of this match!",
+                "ONE HUNDRED AND FIFTY for the partnership! Truly magnificent batting all round!",
+                "150-run stand — the bowlers have had no answers to {striker} and {nonStriker} whatsoever.",
+                "A mega partnership — 150 runs! This game is {batTeam}'s to lose from here.",
+            ],
+
+            // ── OVER END (11 lines) ───────────────────────────────────────
+            over_end: [
+                "End of over {overNum} — {thisOverRuns} runs from the over. Good hard cricket from both sides.",
+                "Over {overNum} complete! {batTeam} pick up {thisOverRuns} runs from that over.",
+                "That's the over. {bowler} finishes with figures of {bwlFigs} — {thisOverRuns} runs off this one.",
+                "End of over {overNum}! {thisOverRuns} runs from it — the match continues to simmer.",
+                "Over complete — {thisOverRuns} runs scored. The battle between bat and ball goes on.",
+                "Over {overNum} done! {thisOverRuns} runs — both teams digging deep, every ball vital.",
+                "End of over {overNum} — {bowler} gave away {thisOverRuns} runs. Both teams ready for more.",
+                "That's {overNum} overs gone — {thisOverRuns} from this one. On to the next.",
+                "Over {overNum} complete! {thisOverRuns} runs — important phase of the game done.",
+                "End of over — {thisOverRuns} runs scored. {batTeam} keep pushing, {bowlTeam} keep fighting.",
+                "Over {overNum} done and dusted — {thisOverRuns} runs conceded by {bowler} in that over.",
+            ],
+
+            // ── MILESTONE 40s (7 lines) ───────────────────────────────────
+            milestone_40s: [
+                "{striker} now on {strikerRuns} — the half-century is beckoning! Getting close to fifty.",
+                "Into the 40s for {striker} — the crowd anticipating a half-century!",
+                "{striker} is in the 40s — a big milestone is just around the corner.",
+                "{striker} closing in on fifty — {strikerRuns} runs. Concentration is key now.",
+                "Forty and counting! {striker} looking in excellent touch — can they get to fifty?",
+                "{striker} on {strikerRuns} — half-century in sight! The crowd is getting restless.",
+                "The fifty beckons for {striker} — {strikerRuns} on the board and playing beautifully.",
+            ],
+
+            // ── MILESTONE 90s (9 lines) ───────────────────────────────────
+            milestone_90s: [
+                "{striker} on {strikerRuns} — the century is within touching distance! So close!",
+                "{striker} in the nervous 90s — just ten more needed for a century. Incredible!",
+                "{striker} nervously approaching three figures — on {strikerRuns}. The crowd holds its breath.",
+                "So close to a century for {striker}! {strikerRuns} runs — can they get there?",
+                "{striker} in the 90s — the whole ground is buzzing! Come on!",
+                "Ninety and beyond for {striker}! {strikerRuns} runs — a century is tantalisingly close!",
+                "The century beckons — {striker} on {strikerRuns} runs. This is the big moment.",
+                "{striker} is ONE SHOT away from a century — {strikerRuns} now. Incredible innings.",
+                "Nerves of steel needed now — {striker} on {strikerRuns}, ten away from a hundred!",
+            ],
+
+            // ── FIFTY (11 lines) ──────────────────────────────────────────
+            milestone_fifty: [
+                "FIFTY! {striker} raises the bat — a wonderful half-century! Crowd on their feet!",
+                "HALF CENTURY for {striker}! {strikerRuns} runs — what a knock this has been so far!",
+                "{striker} reaches FIFTY! Superb batting — deserved every one of those runs!",
+                "FIFTY for {striker}! The bat is raised, the crowd applauds — brilliant innings!",
+                "What an innings! {striker} brings up the half-century with a glorious stroke!",
+                "{striker} FIFTY! Raises the bat to the dressing room — a superb effort.",
+                "FIFTY UP for {striker}! A well-deserved milestone — this innings has been special.",
+                "Half-century for {striker}! {strikerRuns} off {strikerBalls} — excellent strike rate too!",
+                "FIFTY RUNS for {striker}! The crowd rises as one — what a moment this is!",
+                "{striker} reaches the half-century! Patient, composed, brilliant batting.",
+                "FIFTY! {striker} has batted superbly to get to this milestone — raise that bat!",
+            ],
+
+            // ── CENTURY (11 lines) ────────────────────────────────────────
+            milestone_century: [
+                "CENTURY! {striker} raises the bat to the sky — ONE HUNDRED RUNS! Incredible!",
+                "ONE HUNDRED for {striker}! What a knock — the crowd gives a standing ovation!",
+                "HUNDRED! {striker} reaches the three-figure mark — absolutely magnificent batting!",
+                "A CENTURY! {striker} has done it! What a player, what an innings, what a moment!",
+                "ONE HUNDRED RUNS! {striker} has played a stunning innings — century on the board!",
+                "CENTURY for {striker}! {strikerRuns} off {strikerBalls} — an innings for the ages!",
+                "The hundred is up for {striker}! The whole ground is on its feet — simply spectacular!",
+                "CENTURY! What composure, what skill, what a player — {striker} deserves every run!",
+                "A hundred runs for {striker}! This is the stuff of dreams — a perfect innings!",
+                "CENTURY! {striker} milks the applause — {strikerRuns} runs and still going!",
+                "{striker} reaches ONE HUNDRED! An iconic moment — {batTeam} are ecstatic!",
+            ],
+
+            // ── FIFER (6 lines) ───────────────────────────────────────────
+            fifer: [
+                "FIVE WICKETS for {bowler}! A brilliant fifer — what a spell of bowling!",
+                "Five for {bowler}! Taking them apart one by one — the performance of the match!",
+                "FIFER! {bowler} has five wickets — a spectacular achievement in this game!",
+                "Five wickets for {bowler}! The crowd rises to applaud — a deserved fifer!",
+                "{bowler} takes a five-wicket haul! Match-winning bowling — simply magnificent!",
+                "FIVE-FOR for {bowler}! What a spell — this is the stuff of bowling legends!",
+            ],
+
+            // ── HAT-TRICK CHANCE (6 lines) ────────────────────────────────
+            hat_trick_chance: [
+                "HAT-TRICK BALL! {bowler} has taken two in two — the field is set, the whole ground watching!",
+                "{bowler} on a hat-trick! New batter in — can {bowler} make history right now?",
+                "TWO IN TWO for {bowler}! The hat-trick ball is coming — incredible moment!",
+                "Hat-trick chance for {bowler}! Two wickets in successive balls — this is extraordinary!",
+                "{bowler} is on a hat-trick — the pressure is indescribable on this next delivery!",
+                "Hat-trick opportunity! {bowler} has been magnificent — two down, can they make it three?",
+            ],
+
+            // ── WIN (9 lines) ─────────────────────────────────────────────
+            win: [
+                "{batTeam} have won the match! What a wonderful performance — congratulations!",
+                "{batTeam} WIN! A brilliant victory — they've done it in style!",
+                "Victory for {batTeam}! All the hard work, all the effort — it's paid off magnificently!",
+                "{batTeam} are the winners! What a match this has been from start to finish!",
+                "IT'S OVER! {batTeam} WIN! The celebrations begin — a remarkable match!",
+                "{batTeam} have done it! A complete performance — with bat, with ball, and in the field!",
+                "What a match! {batTeam} emerge victorious — the dressing room will be celebrating tonight!",
+                "{batTeam} WIN! A memorable victory — every player contributed to this special result!",
+                "The match is won by {batTeam}! History made, celebrations well and truly deserved!",
+            ],
+
+            // ── TIE (5 lines) ─────────────────────────────────────────────
+            tie: [
+                "IT'S A TIE! What a remarkable conclusion — both teams finish level! Extraordinary!",
+                "An incredible TIE! You couldn't have scripted a better finish to this match!",
+                "THE MATCH IS TIED! Both teams have given absolutely everything — a fair result!",
+                "TIE! What drama — they've finished on the same score! The crowd cannot believe it!",
+                "A TIE! One of cricket's rarest outcomes — what a match this has been!",
+            ],
+
+        }; // end POOLS
+
+        /* ══════════════════════════════════════════════════════════════════
+           COMMENTARY ENGINE — CONTEXT, SELECTION & DISPATCH
+           ══════════════════════════════════════════════════════════════════ */
+
+        // Commentary context tracker
+        const CC = {
+            dots: 0,
+            partnership: 0,
+            partnerBalls: 0,
+            p50: false, p100: false, p150: false,
+            thisOverRuns: 0,
+            lastKeys: {},
+            tickerTimer: null,
+            hatTrick: false,   // previous ball was a wicket
+            hatTrickCheck: false,   // two consecutive wickets
+        };
+
+        // Non-repeating random pick
+        function pick(pool, key) {
+            if (!pool || !pool.length) return '';
+            if (pool.length === 1) return pool[0];
+            const last = CC.lastKeys[key] ?? -1;
+            let idx, attempts = 0;
+            do {
+                idx = Math.floor(Math.random() * pool.length);
+                attempts++;
+            } while (idx === last && attempts < 12);
+            CC.lastKeys[key] = idx;
+            return pool[idx];
+        }
+
+        // Fill template tokens
+        function fill(tmpl, ctx) {
+            return (tmpl || '')
+                .replace(/\{striker\}/g, ctx.striker || 'the batsman')
+                .replace(/\{bowler\}/g, ctx.bowler || 'the bowler')
+                .replace(/\{nonStriker\}/g, ctx.nonStriker || 'the non-striker')
+                .replace(/\{batTeam\}/g, ctx.batTeam || 'the batting side')
+                .replace(/\{bowlTeam\}/g, ctx.bowlTeam || 'the bowling side')
+                .replace(/\{runs\}/g, ctx.runs ?? '')
+                .replace(/\{strikerRuns\}/g, ctx.strikerRuns ?? '')
+                .replace(/\{strikerBalls\}/g, ctx.strikerBalls ?? '')
+                .replace(/\{target\}/g, ctx.target ?? '')
+                .replace(/\{needed\}/g, ctx.needed ?? '')
+                .replace(/\{ballsLeft\}/g, ctx.ballsLeft ?? '')
+                .replace(/\{oversLeft\}/g, ctx.oversLeft ?? '')
+                .replace(/\{rrr\}/g, ctx.rrr ?? '')
+                .replace(/\{crr\}/g, ctx.crr ?? '')
+                .replace(/\{overNum\}/g, ctx.overNum ?? '')
+                .replace(/\{partnership\}/g, ctx.partnership ?? '')
+                .replace(/\{bwlFigs\}/g, ctx.bwlFigs ?? '')
+                .replace(/\{thisOverRuns\}/g, ctx.thisOverRuns ?? '');
+        }
+
+        // Build context object from match data
+        function buildCtx(d) {
+            if (!d) return {};
+            const overs = d.balls / 6;
+            const maxOvers = d.maxOvers || 20;
+            const striker = d.str === 1 ? d.p1n : d.p2n;
+            const sR = d.str === 1 ? (d.p1r || 0) : (d.p2r || 0);
+            const sB = d.str === 1 ? (d.p1b || 0) : (d.p2b || 0);
+            const nonStr = d.str === 1 ? d.p2n : d.p1n;
+            const bowler = d.bwn || '';
+            const bRow = (d.bowlRows || []).find(r => r.name === bowler);
+            const bwlFigs = bRow ? `${bRow.wkts}-${bRow.runs}` : '0-0';
+            const crr = overs > 0 ? (d.runs / overs).toFixed(2) : '0.00';
+            const ballsLeft = Math.max(0, maxOvers * 6 - d.balls);
+            const needed = d.target > 0 ? Math.max(0, d.target - d.runs) : 0;
+            const rrr = (d.target > 0 && ballsLeft > 0)
+                ? (needed / (ballsLeft / 6)).toFixed(2) : '0.00';
+            const overNum = Math.floor(d.balls / 6);
+            return {
+                striker, strikerRuns: sR, strikerBalls: sB, nonStriker: nonStr,
+                bowler, bwlFigs, batTeam: d.batTeam || '', bowlTeam: d.bowlTeam || '',
+                runs: d.runs, wkts: d.wkts, target: d.target || 0,
+                crr, rrr, needed, ballsLeft,
+                oversLeft: `${Math.floor(ballsLeft / 6)}.${ballsLeft % 6}`,
+                overNum, partnership: CC.partnership,
+                thisOverRuns: CC.thisOverRuns,
+            };
+        }
+
+        // Generate a single commentary line for an event
+        function genLine(event, ctx) {
+            const pool = C[event];
+            if (!pool || !pool.length) return '';
+            return fill(pick(pool, event), ctx);
+        }
+
+        // Main selection + dispatch function
+        function selectAndSpeak(d, prev, ballEvent, runsScored) {
+            if (!d) return;
+            const ctx = buildCtx(d);
+            const overs = d.balls / 6;
+            const maxOvers = d.maxOvers || 20;
+            const completedOvs = Math.floor(d.balls / 6);
+            const ballsThisOv = d.balls % 6;
+            const isPP = overs < 6;
+            const isDeath = overs >= (maxOvers - 4);
+            const isLastOv = completedOvs === (maxOvers - 1);
+
+            let line = '';
+            let badgeTxt = '';
+            let badgeCls = '';
+
+            // ── WICKET ────────────────────────────────────────
+            if (ballEvent === 'wicket') {
+                // Hat-trick check
+                if (CC.hatTrickCheck) {
+                    line = genLine('hat_trick_chance', ctx);
+                    badgeTxt = 'HAT-TRICK!'; badgeCls = 'orange';
+                    CC.hatTrickCheck = false; CC.hatTrick = false;
+                } else {
+                    if (CC.hatTrick) CC.hatTrickCheck = true;
+                    CC.hatTrick = true;
+                    line = genLine('wicket', ctx);
+                    badgeTxt = 'WICKET!'; badgeCls = 'red';
+                }
+                CC.dots = 0; CC.partnership = 0; CC.partnerBalls = 0;
+                CC.p50 = false; CC.p100 = false; CC.p150 = false;
+
+                // ── WIDE ──────────────────────────────────────────
+            } else if (ballEvent === 'wide') {
+                line = genLine('wide', ctx);
+                badgeTxt = 'WIDE'; badgeCls = 'orange';
+                CC.hatTrick = false; CC.hatTrickCheck = false;
+
+                // ── NO BALL ───────────────────────────────────────
+            } else if (ballEvent === 'noball') {
+                line = genLine('noball', ctx);
+                badgeTxt = 'NO BALL'; badgeCls = 'orange';
+                CC.hatTrick = false; CC.hatTrickCheck = false;
+
+                // ── FREE HIT ──────────────────────────────────────
+            } else if (ballEvent === 'freehit') {
+                line = genLine('freehit', ctx);
+                badgeTxt = 'FREE HIT'; badgeCls = 'orange';
+
+                // ── BYE ───────────────────────────────────────────
+            } else if (ballEvent === 'bye') {
+                line = genLine('bye', ctx);
+                badgeTxt = 'BYE';
+
+                // ── LEG BYE ───────────────────────────────────────
+            } else if (ballEvent === 'legbye') {
+                line = genLine('legbye', ctx);
+                badgeTxt = 'LB';
+
+                // ── SIX ───────────────────────────────────────────
+            } else if (runsScored === 6) {
+                line = genLine('six', ctx);
+                badgeTxt = 'SIX!'; badgeCls = 'purple';
+                CC.dots = 0; CC.partnership += 6; CC.partnerBalls++;
+                CC.hatTrick = false; CC.hatTrickCheck = false;
+                _checkPartnerMilestone(ctx);
+
+                // ── FOUR ──────────────────────────────────────────
+            } else if (runsScored === 4) {
+                line = genLine('four', ctx);
+                badgeTxt = 'FOUR!'; badgeCls = 'blue';
+                CC.dots = 0; CC.partnership += 4; CC.partnerBalls++;
+                CC.hatTrick = false; CC.hatTrickCheck = false;
+                _checkPartnerMilestone(ctx);
+
+                // ── DOT ───────────────────────────────────────────
+            } else if (runsScored === 0) {
+                CC.dots++;
+                CC.partnerBalls++;
+                CC.hatTrick = false; CC.hatTrickCheck = false;
+                if (CC.dots >= 5) {
+                    line = genLine('dots5plus', ctx);
+                } else if (CC.dots >= 3) {
+                    line = genLine('dots3plus', ctx);
+                } else {
+                    line = genLine('dot', ctx);
+                }
+                badgeTxt = 'DOT';
+
+                // ── RUNS (1, 2, 3) ────────────────────────────────
+            } else {
+                CC.dots = 0;
+                CC.partnership += runsScored;
+                CC.partnerBalls++;
+                CC.hatTrick = false; CC.hatTrickCheck = false;
+                _checkPartnerMilestone(ctx);
+                if (runsScored === 1) { line = genLine('one', ctx); badgeTxt = '1 RUN'; }
+                else if (runsScored === 2) { line = genLine('two', ctx); badgeTxt = '2 RUNS'; }
+                else if (runsScored === 3) { line = genLine('three', ctx); badgeTxt = '3 RUNS'; }
+                else { line = `${runsScored} runs scored off that delivery.`; badgeTxt = `${runsScored} RUNS`; }
+            }
+
+            // ── Contextual overlay ─────────────────────────────
+            if (!line) {
+                if (isPP) line = genLine('powerplay', ctx);
+                else if (isDeath) line = genLine('death', ctx);
+                else if (d.target > 0) {
+                    const r = parseFloat(ctx.rrr);
+                    if (r >= 10) line = genLine('pressure_chase', ctx);
+                    else if (r < 7 && r > 0) line = genLine('easy_chase', ctx);
+                }
+            }
+
+            // ── Last over announcement ─────────────────────────
+            if (isLastOv && ballsThisOv === 0) {
+                const lol = genLine('lastover', ctx);
+                line = lol + (line ? ' ' + line : '');
+                badgeTxt = 'LAST OVER';
+            }
+
+            // ── Powerplay opening ──────────────────────────────
+            if (completedOvs === 0 && ballsThisOv === 0 && d.balls === 0) {
+                line = genLine('powerplay', ctx);
+                badgeTxt = 'POWERPLAY';
+            }
+
+            // ── Death overs announcement ───────────────────────
+            if (completedOvs === Math.floor(maxOvers - 4) && ballsThisOv === 0 && d.innings) {
+                const dl = genLine('death', ctx);
+                line = dl + (line ? ' ' + line : '');
+                badgeTxt = 'DEATH OVERS';
+            }
+
+            // ── Chase pressure context ─────────────────────────
+            if (d.target > 0 && !line) {
+                const r = parseFloat(ctx.rrr);
+                if (r >= 10) { line = genLine('pressure_chase', ctx); badgeTxt = 'PRESSURE'; }
+                else if (r < 7 && r > 0) { line = genLine('easy_chase', ctx); }
+            }
+
+            if (line) {
+                showTicker(line, badgeTxt, badgeCls);
+                setTimeout(() => enqueueSpeech(line), ballEvent === 'wicket' ? 600 : 250);
+            }
+        }
+
+        function _checkPartnerMilestone(ctx) {
+            if (CC.partnership >= 150 && !CC.p150) {
+                CC.p150 = true;
+                const l = genLine('partnership150', ctx);
+                setTimeout(() => { showTicker(l, '150 PARTNERSHIP', 'green'); enqueueSpeech(l); }, 700);
+            } else if (CC.partnership >= 100 && !CC.p100) {
+                CC.p100 = true;
+                const l = genLine('partnership100', ctx);
+                setTimeout(() => { showTicker(l, '100 PARTNERSHIP', 'green'); enqueueSpeech(l); }, 700);
+            } else if (CC.partnership >= 50 && !CC.p50) {
+                CC.p50 = true;
+                const l = genLine('partnership50', ctx);
+                setTimeout(() => { showTicker(l, '50 PARTNERSHIP', 'green'); enqueueSpeech(l); }, 700);
+            }
+        }
+
+        function checkPlayerMilestones(d, prev) {
+            if (!prev) return;
+            const striker = d.str === 1 ? d.p1n : d.p2n;
+            const sR = d.str === 1 ? (d.p1r || 0) : (d.p2r || 0);
+            const sB = d.str === 1 ? (d.p1b || 0) : (d.p2b || 0);
+            const prevSR = prev.str === 1 ? (prev.p1r || 0) : (prev.p2r || 0);
+            const ctx = buildCtx(d);
+            ctx.strikerRuns = sR; ctx.strikerBalls = sB;
+
+            if (sR >= 100 && prevSR < 100) {
+                const l = genLine('milestone_century', ctx);
+                setTimeout(() => { showTicker(l, 'CENTURY!', '', true); playCentury(); enqueueSpeech(l); }, 400);
+                showEventPlayer(striker, '🏆', `${sR} RUNS`, 'CENTURY!', '');
+            } else if (sR >= 50 && prevSR < 50) {
+                const l = genLine('milestone_fifty', ctx);
+                setTimeout(() => { showTicker(l, 'FIFTY!', 'green'); playFifty(); enqueueSpeech(l); }, 400);
+                showEventPlayer(striker, '⭐', `${sR} RUNS`, 'HALF CENTURY!', '');
+            } else if (sR >= 90 && prevSR < 90) {
+                const l = genLine('milestone_90s', ctx);
+                setTimeout(() => { showTicker(l, 'IN THE 90s!', '', true); enqueueSpeech(l); }, 400);
+            } else if (sR >= 40 && prevSR < 40) {
+                const l = genLine('milestone_40s', ctx);
+                setTimeout(() => { showTicker(l, 'FORTIES', 'green'); }, 400);
+            }
+
+            // Fifer
+            const bowler = d.bwn || '';
+            const bRow = (d.bowlRows || []).find(r => r.name === bowler);
+            const pbRow = (prev.bowlRows || []).find(r => r.name === bowler);
+            if (bRow && pbRow && bRow.wkts === 5 && pbRow.wkts < 5) {
+                ctx.bowler = bowler;
+                const l = genLine('fifer', ctx);
+                setTimeout(() => { showTicker(l, 'FIFER!', '', true); playCentury(); enqueueSpeech(l); }, 500);
+                showEventPlayer(bowler, '🎩', `${bRow.wkts}-${bRow.runs}`, 'BRILLIANT FIFER!', '');
+            }
+        }
+
+        // ── Ticker display ─────────────────────────────────────────────
+        function showTicker(text, badge, badgeCls) {
+            if (!text) return;
+            clearTimeout(CC.tickerTimer);
+            const ticker = document.getElementById('commentaryTicker');
+            const tt = document.getElementById('tickerText');
+            const tb = document.getElementById('tickerBadge');
+
+            tt.textContent = text;
+            tb.textContent = badge || 'LIVE';
+            tb.className = 'ticker-badge' + (badgeCls ? ' ' + badgeCls : '');
+
+            // Re-trigger CSS animation
+            tt.style.animation = 'none';
+            void tt.offsetWidth;
+            tt.style.animation = '';
+
+            ticker.classList.add('show');
+            CC.tickerTimer = setTimeout(() => ticker.classList.remove('show'), 7000);
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           FIREBASE + RENDERING
+           ══════════════════════════════════════════════════════════════════ */
+        import { initializeApp, getDatabase, ref, onValue, update, get } from "./js/localdb.js";
+
+        const db = getDatabase(initializeApp({}));
+        const uiRef = ref(db, 'ui');
+        const annRef = ref(db, 'announcement');
+        const phRef = ref(db, 'playerPhotos');
+        const commRef = ref(db, 'commentarySettings');
+
+        // ── Commentary Settings from Firebase ─────────────────────────
+        onValue(commRef, snap => {
+            const s = snap.val();
+            if (!s) return;
+            _ttsRate = parseFloat(s.rate) || 1.0;
+            _ttsPitch = parseFloat(s.pitch) || 1.1;
+            // Voice
+            if (s.voiceName) loadVoices(s.voiceName);
+            // Enable/disable from admin control
+            if (typeof s.enabled === 'boolean') {
+                const was = _audioOn;
+                _audioOn = s.enabled;
+                syncAudioUI();
+                if (!_audioOn && was) clearSpeechQ();
+                if (_audioOn && !was) { try { getAudioCtx().resume(); } catch (e) { } loadVoices(); }
+            }
+        });
+
+        // ── Player Photos ──────────────────────────────────────────────
+        const $ = id => document.getElementById(id);
+        let _playerPhotos = {}, _winShown = false, _prevData = null;
+        let _epovTimer = null, _overPlayersTimer = null;
+        let _firstDataReceived = false;
+
+        const BLANK_AVATAR = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 108'%3E%3Crect width='80' height='108' fill='%23111' rx='5'/%3E%3Ccircle cx='40' cy='38' r='16' fill='%23333'/%3E%3Cellipse cx='40' cy='90' rx='25' ry='20' fill='%23333'/%3E%3C/svg%3E`;
+
+        function getPhoto(name) {
+            if (!name) return BLANK_AVATAR;
+            const key = name.replace(/[^a-zA-Z0-9]/g, '_');
+            return _playerPhotos[key] || BLANK_AVATAR;
+        }
+        function setPhoto(el, name) {
+            if (!el) return;
+            el.src = getPhoto(name); el.dataset.phName = name || '';
+        }
+
+        onValue(phRef, snap => {
+            _playerPhotos = snap.val() || {};
+            document.querySelectorAll('[data-ph-name]').forEach(el => {
+                const n = el.dataset.phName; if (n) el.src = getPhoto(n);
+            });
+        });
+
+        function markLoaded() {
+            if (_firstDataReceived) return;
+            _firstDataReceived = true;
+            const shim = $('loadingShim');
+            shim.classList.add('gone');
+            setTimeout(() => shim.remove(), 500);
+        }
+
+        let rTimer = null;
+        onValue(ref(db, '.info/connected'), s => {
+            if (s.val() === false) rTimer = setTimeout(() => location.reload(), 4000);
+            else clearTimeout(rTimer);
+        });
+        setTimeout(() => location.reload(), 5 * 60 * 1000);
+
+        let currentTab = 'bat';
+        window.setTab = (t) => {
+            currentTab = t;
+            $('panBat').style.display = t === 'bat' ? 'flex' : 'none';
+            $('panBwl').style.display = t === 'bwl' ? 'flex' : 'none';
+            $('tabBat').className = t === 'bat' ? 'sc-tab active' : 'sc-tab';
+            $('tabBwl').className = t === 'bwl' ? 'sc-tab active' : 'sc-tab';
+        };
+
+        let uiSt = { scorebar: true, scorecard: false, autoOverPopup: false, overPopupDur: 8 };
+        onValue(uiRef, s => { uiSt = s.val() || { scorebar: true, scorecard: false }; });
+        document.addEventListener('keydown', e => {
+            if (e.key === 's' || e.key === 'S') update(uiRef, { scorecard: !uiSt.scorecard });
+            if (e.key === 'b' || e.key === 'B') update(uiRef, { scorebar: !uiSt.scorebar });
+            if (e.key === '1') window.setTab('bat');
+            if (e.key === '2') window.setTab('bwl');
+            if (e.key === 'Escape') { $('winOverlay').classList.remove('show'); }
+        });
+        onValue(uiRef, snap => {
+            const ui = snap.val() || {};
+            $('sbWrap').className = ui.scorebar === false ? 'sb-wrap hidden' : 'sb-wrap';
+            if (!autoPopupActive) { $('scWrap').className = ui.scorecard ? 'sc-wrap' : 'sc-wrap hidden'; }
+        });
+
+        let autoPopupActive = false, autoPopupTimer = null, autoBarTimer = null, lastOverCount = -1;
+
+        function triggerAutoPopup(dur) {
+            if (autoPopupTimer) clearTimeout(autoPopupTimer);
+            if (autoBarTimer) clearTimeout(autoBarTimer);
+            autoPopupActive = true;
+            $('scWrap').className = 'sc-wrap';
+            window.setTab('bat');
+            const bar = $('scAutoBar'), fill = $('scAutoBarFill');
+            bar.classList.add('running');
+            fill.style.animation = 'none'; void fill.offsetWidth;
+            fill.style.animation = `autoBarShrink ${dur}s linear forwards`;
+            const badge = $('overBadge');
+            badge.classList.add('show');
+            setTimeout(() => badge.classList.remove('show'), 3000);
+            const half = Math.floor(dur / 2);
+            autoBarTimer = setTimeout(() => { window.setTab('bwl'); }, half * 1000);
+            autoPopupTimer = setTimeout(() => {
+                autoPopupActive = false;
+                bar.classList.remove('running');
+                window.setTab('bat');
+                const ui = uiSt || {};
+                $('scWrap').className = ui.scorecard ? 'sc-wrap' : 'sc-wrap hidden';
+            }, dur * 1000);
+        }
+
+        function showEventPlayer(name, emoji, statText, subText, colorClass) {
+            clearTimeout(_epovTimer);
+            $('epovEmoji').textContent = emoji;
+            const photoEl = $('epovPhoto');
+            photoEl.src = getPhoto(name);
+            photoEl.className = `id-card-photo${colorClass ? ' ' + colorClass : ''}`;
+            $('epovIdAccent').className = `epov-id-accent${colorClass ? ' ' + colorClass : ''}`;
+            $('epovName').textContent = name || '';
+            $('epovStat').textContent = statText || '';
+            $('epovStat').className = `epov-stat${colorClass ? ' ' + colorClass : ''}`;
+            $('epovSub').textContent = subText || '';
+            const wrap = $('epovIdWrap');
+            wrap.style.animation = 'none'; void wrap.offsetWidth; wrap.style.animation = '';
+            $('eventPlayerOverlay').classList.add('show');
+            _epovTimer = setTimeout(() => { $('eventPlayerOverlay').classList.remove('show'); }, 5000);
+        }
+
+        function showOverPlayers(d, overNum, overBalls) {
+            const striker = d.str === 1 ? d.p1n : d.p2n;
+            const strikerR = d.str === 1 ? (d.p1r || 0) : (d.p2r || 0);
+            const strikerB = d.str === 1 ? (d.p1b || 0) : (d.p2b || 0);
+            const nonStr = d.str === 1 ? d.p2n : d.p1n;
+            const nonStrR = d.str === 1 ? (d.p2r || 0) : (d.p1r || 0);
+            const nonStrB = d.str === 1 ? (d.p2b || 0) : (d.p1b || 0);
+            const bowler = d.bwn || '';
+            const bRow = (d.bowlRows || []).find(r => r.name === bowler);
+            const bFig = bRow ? `${bRow.wkts}-${bRow.runs}` : '—';
+            setPhoto($('opStrikerPhoto'), striker);
+            setPhoto($('opNonStrikerPhoto'), nonStr);
+            setPhoto($('opBowlerPhoto'), bowler);
+            $('opStrikerName').textContent = striker || '—';
+            $('opNonStrikerName').textContent = nonStr || '—';
+            $('opBowlerName').textContent = bowler || '—';
+            $('opStrikerStat').textContent = `${strikerR}(${strikerB})`;
+            $('opNonStrikerStat').textContent = `${nonStrR}(${nonStrB})`;
+            $('opBowlerStat').textContent = bFig;
+            $('overSummaryOvNum').textContent = `END OF OVER ${overNum}`;
+            const ballsHtml = overBalls.map(v => {
+                let cls = '';
+                if (v === 'W') cls = 'bW'; else if (v === 6) cls = 'b6'; else if (v === 4) cls = 'b4';
+                else if (v === 0) cls = 'b0';
+                else if (typeof v === 'string') {
+                    if (v.startsWith('Wd')) cls = 'bWd'; else if (v.startsWith('Nb')) cls = 'bNb';
+                    else if (v.startsWith('By') || v.startsWith('Lb')) cls = 'bBy';
+                }
+                return `<div class="ball ${cls}">${v}</div>`;
+            }).join('');
+            $('overSummaryBalls').innerHTML = ballsHtml;
+            const runsInOver = overBalls.reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
+            $('overSummaryRuns').textContent = `${runsInOver} runs in this over`;
+            clearTimeout(_overPlayersTimer);
+            $('overPlayersWrap').classList.add('show');
+            _overPlayersTimer = setTimeout(() => { $('overPlayersWrap').classList.remove('show'); }, 10000);
+        }
+
+        function showWinOverlay(d, winnerTeam, margin, winType) {
+            if (_winShown) return;
+            _winShown = true;
+            playWin();
+            const ctx = buildCtx(d);
+            ctx.batTeam = winnerTeam;
+            const line = genLine(winType === 'tie' ? 'tie' : 'win', ctx);
+            setTimeout(() => enqueueSpeech(line), 600);
+            $('winOverlayTitle').textContent = winType === 'tie' ? "IT'S A TIE!" : `${winnerTeam} WIN!`;
+            $('winOverlaySub').textContent = margin;
+            $('winOverlayDetail').textContent = `${d.batTeam} vs ${d.bowlTeam} · ${Math.floor(d.balls / 6)}.${d.balls % 6} overs`;
+            $('winOverlay').querySelector('.win-trophy-big').textContent = winType === 'tie' ? '🤝' : '🏆';
+            const batRows = (d.batRows || []).sort((a, b) => b.runs - a.runs).slice(0, 2);
+            const bowlRows = (d.bowlRows || []).sort((a, b) => b.wkts - a.wkts || a.runs - b.runs).slice(0, 1);
+            const stars = [...batRows, ...bowlRows];
+            const plHtml = stars.map((p, idx) => {
+                const photo = getPhoto(p.name);
+                const isBowler = idx === stars.length - 1 && p.wkts !== undefined && p.balls > 0;
+                const stat = isBowler ? `${p.wkts}-${p.runs}` : `${p.runs}(${p.balls})`;
+                const tagCls = isBowler ? 'bowler' : '';
+                const tagLbl = isBowler ? 'Bowler' : 'Batter';
+                return `<div class="win-player-card"><div class="win-id-wrap"><img class="id-card-photo" src="${photo}" alt="${p.name}" style="width:95px;height:128px;"><div class="win-id-tag ${tagCls}">${tagLbl}</div></div><div class="win-player-name">${p.name}</div><div class="win-player-stat">${stat}</div></div>`;
+            }).join('');
+            $('winOverlayPlayers').innerHTML = plHtml;
+            const burst = $('confettiBurst');
+            burst.innerHTML = '';
+            const cols = ['#f5c518', '#06d6a0', '#e63946', '#9b72cf', '#fff', '#ffd700', '#ff8c42'];
+            for (let i = 0; i < 60; i++) {
+                const d2 = document.createElement('div');
+                d2.className = 'wc-bit';
+                d2.style.cssText = `left:${Math.random() * 100}%;top:${-5 + Math.random() * 10}%;background:${cols[Math.floor(Math.random() * cols.length)]};height:${8 + Math.random() * 12}px;animation-delay:${Math.random() * 4}s;animation-duration:${4 + Math.random() * 4}s;transform:rotate(${Math.random() * 360}deg);`;
+                burst.appendChild(d2);
+            }
+            $('winOverlay').classList.add('show');
+            setTimeout(() => { $('winOverlay').classList.remove('show'); }, 30000);
+        }
+
+        // ── Announcement system ────────────────────────────────────────
+        const PARTICLE_COLORS = {
+            gold: ['#f5c518', '#ffd54f', '#fff176', '#ffe082', '#ffca28'],
+            red: ['#e63946', '#ff6b6b', '#ff8080', '#ffadad', '#ff4d6d'],
+            purple: ['#9b72cf', '#c4a0ff', '#d4b0ff', '#e8d5ff', '#b392f0'],
+            blue: ['#118ab2', '#7ec8ff', '#90d5ff', '#a8dfff', '#48cae4'],
+            custom: ['#06d6a0', '#40e0b0', '#70edc0', '#a0f5d5', '#23e5a0'],
+            win: ['#ffd700', '#ffec6e', '#fff9c4', '#ffa500', '#ffe082'],
+            tie: ['#a0c4ff', '#e8f4ff', '#7ec8ff', '#4a90d9', '#cce5ff'],
+        };
+        const EVENT_EMOJIS = {
+            gold: ['🏆', '⭐', '✨', '🌟', '💛', '🥇', '🎊', '🎉', '🏅', '💫'],
+            red: ['💥', '🔴', '😱', '🎯', '🔥', '💢', '⚡', '😤', '🏏', '❌'],
+            purple: ['🚀', '💜', '🌌', '⚡', '🔮', '🌠', '💥', '🎆', '🌊', '✨'],
+            blue: ['🔥', '💙', '4️⃣', '🎯', '💦', '⚡', '🏏', '🌀', '💨', '🎊'],
+            custom: ['🎉', '🎊', '🎈', '🥳', '🎆', '🌈', '🎁', '🪄', '✨', '🎀'],
+            win: ['🏆', '🥇', '🎊', '🎉', '🌟', '⭐', '🎆', '🎇', '🥂', '👑'],
+            tie: ['🤝', '⚖️', '🏏', '🎯', '💙', '🌊', '✨', '🎗️', '🔵', '💫'],
+        };
+
+        let annTimer = null, lastAnnId = null;
+        function spawnParticles(style) {
+            const c = $('annParticles'); c.innerHTML = '';
+            const cols = PARTICLE_COLORS[style] || PARTICLE_COLORS.gold;
+            for (let i = 0; i < 28; i++) {
+                const p = document.createElement('div'); p.className = 'ann-p';
+                const a = Math.random() * 360, d = 60 + Math.random() * 120;
+                const tx = Math.cos(a * Math.PI / 180) * d, ty = Math.sin(a * Math.PI / 180) * d - 40;
+                const col = cols[Math.floor(Math.random() * cols.length)], sz = 3 + Math.random() * 7;
+                p.style.cssText = `left:${10 + Math.random() * 80}%;top:${10 + Math.random() * 80}%;width:${sz}px;height:${sz}px;background:${col};--tx:${tx}px;--ty:${ty}px;animation-delay:${Math.random() * .5}s;animation-duration:${1 + Math.random() * .8}s;`;
+                c.appendChild(p);
+            }
+        }
+        function spawnRain(style, dur) {
+            const rain = $('annRain'); rain.innerHTML = '';
+            const emojis = EVENT_EMOJIS[style] || EVENT_EMOJIS.custom;
+            for (let i = 0; i < 22; i++) {
+                const el = document.createElement('div'); el.className = 'rain-emoji';
+                el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                const spin = (Math.random() > .5 ? 1 : -1) * (180 + Math.random() * 360);
+                el.style.cssText = `left:${2 + Math.random() * 96}%;font-size:${22 + Math.random() * 28}px;--fall-dist:110vh;--spin:${spin}deg;animation-delay:${Math.random() * 4}s;animation-duration:${4 + Math.random() * 6}s;`;
+                rain.appendChild(el);
+            }
+            setTimeout(() => { rain.innerHTML = ''; }, Math.max(0, (dur - 1) * 1000));
+        }
+        function buildFloaters(style) {
+            const emojis = EVENT_EMOJIS[style] || EVENT_EMOJIS.custom;
+            const cont = $('annFloaters'); cont.innerHTML = '';
+            emojis.slice(0, 5).forEach((em, i) => {
+                const d = document.createElement('span'); d.className = 'ann-floater'; d.textContent = em;
+                d.style.cssText = `animation-duration:${1.4 + Math.random() * .8}s;animation-delay:${i * .15}s;`;
+                cont.appendChild(d);
+            });
+        }
+        function showAnn(data) {
+            const toast = $('annToast'), prog = $('annProgress');
+            const DUR = data.dur || 20;
+            if (annTimer) { clearTimeout(annTimer); annTimer = null; }
+            toast.classList.remove('visible', 'leaving'); void toast.offsetWidth;
+            const emojiRing = $('annEmojiRing');
+            if (data.playerName && getPhoto(data.playerName) !== BLANK_AVATAR) {
+                emojiRing.innerHTML = `<img class="ann-player-photo" src="${getPhoto(data.playerName)}" alt="">`;
+            } else {
+                emojiRing.innerHTML = `<div class="ann-emoji" id="annEmoji">${data.emoji || '📣'}</div>`;
+            }
+            $('annText').textContent = data.text || '';
+            $('annSub').textContent = data.sub || '';
+            toast.className = `ann-toast style-${data.style || 'custom'}`;
+            prog.style.animation = 'none'; void prog.offsetWidth;
+            prog.style.animation = `annProgress ${DUR}s linear forwards`;
+            spawnParticles(data.style || 'custom');
+            buildFloaters(data.style || 'custom');
+            if (data.rain !== false) spawnRain(data.style || 'custom', DUR);
+            playAnnounce();
+            setTimeout(() => enqueueSpeech((data.text || '') + (data.sub ? '. ' + data.sub : '')), 300);
+            requestAnimationFrame(() => { toast.classList.add('visible'); });
+            annTimer = setTimeout(() => {
+                toast.classList.add('leaving');
+                $('annRain').innerHTML = '';
+                setTimeout(() => { toast.classList.remove('visible', 'leaving'); }, 520);
+            }, DUR * 1000);
+        }
+
+        get(annRef).then(snap => {
+            lastAnnId = snap.val()?.id || null;
+            onValue(annRef, snap => {
+                const data = snap.val();
+                if (!data || data.id === lastAnnId) return;
+                lastAnnId = data.id;
+                showAnn(data);
+            });
+        });
+
+        // ── Team colour helper ─────────────────────────────────────────
+        function teamColor(name) {
+            const n = (name || '').toUpperCase();
+            if (n.includes('INDIA')) return '#003893';
+            if (n.includes('PAKISTAN')) return '#006747';
+            if (n.includes('AUSTRALIA')) return '#c8902a';
+            if (n.includes('ENGLAND')) return '#CF142B';
+            if (n.includes('SRI LANKA')) return '#003478';
+            if (n.includes('SOUTH AFRICA')) return '#007A4D';
+            if (n.includes('NEW ZEALAND')) return '#2a2a2a';
+            if (n.includes('WEST INDIES')) return '#7B0041';
+            if (n.includes('BANGLADESH')) return '#006A4E';
+            if (n.includes('ZIMBABWE')) return '#D40000';
+            if (n.includes('AFGHANISTAN')) return '#0032A0';
+            if (n.includes('IRELAND')) return '#169B62';
+            let hash = 0;
+            for (const c of n) hash = c.charCodeAt(0) + ((hash << 5) - hash);
+            return `hsl(${Math.abs(hash) % 360},65%,35%)`;
+        }
+        function ballCls(v) {
+            if (v === 'W') return 'bW';
+            if (v === 6) return 'b6';
+            if (v === 4) return 'b4';
+            if (v === 0) return 'b0';
+            if (typeof v === 'string') {
+                if (v.startsWith('Wd')) return 'bWd';
+                if (v.startsWith('Nb')) return 'bNb';
+                if (v.startsWith('By') || v.startsWith('Lb')) return 'bBy';
+            }
+            return '';
+        }
+
+        // ── Ball event detection ───────────────────────────────────────
+        function detectBallEvent(d, prev) {
+            if (!prev) return null;
+            const newBalls = d.recentBalls || [];
+            const prevBalls = prev.recentBalls || [];
+            const lastBall = newBalls.length > 0 ? newBalls[newBalls.length - 1] : null;
+            const prevLast = prevBalls.length > 0 ? prevBalls[prevBalls.length - 1] : null;
+
+            if (prevBalls.length >= 6 && newBalls.length === 0) return 'over_end';
+            if (lastBall === prevLast && d.balls === prev.balls && d.runs === prev.runs && d.wkts === prev.wkts) return null;
+
+            if (d.wkts > prev.wkts) return 'wicket';
+            if (d.freeHit && !prev.freeHit) return 'freehit';
+
+            if (lastBall !== null) {
+                if (typeof lastBall === 'string') {
+                    if (lastBall.startsWith('Wd')) return 'wide';
+                    if (lastBall.startsWith('Nb')) return 'noball';
+                    if (lastBall.startsWith('By')) return 'bye';
+                    if (lastBall.startsWith('Lb')) return 'legbye';
+                    if (lastBall === 'W') return 'wicket';
+                }
+                if (lastBall === 6) return 'six';
+                if (lastBall === 4) return 'four';
+                if (lastBall === 0) return 'dot';
+                if (typeof lastBall === 'number') return 'run';
+            }
+            return 'run';
+        }
+
+        function getRunsFromBall(lastBall) {
+            if (lastBall === null || lastBall === undefined) return 0;
+            if (typeof lastBall === 'number') return lastBall;
+            if (typeof lastBall === 'string') {
+                const m = lastBall.match(/\d+/);
+                return m ? parseInt(m[0]) : 1;
+            }
+            return 0;
+        }
+
+        // ── Main data listener ─────────────────────────────────────────
+        const cricketRef = ref(db, 'cricket');
+
+        get(cricketRef).then(snap => {
+            const d = snap.val(); if (!d) return;
+            renderData(d);
+            markLoaded();
+        }).catch(() => { markLoaded(); });
+
+        onValue(cricketRef, snap => {
+            const d = snap.val(); if (!d) return;
+            markLoaded();
+            renderData(d);
+        });
+
+        function renderData(d) {
+            const batColor = teamColor(d.batTeam);
+            const bowlColor = teamColor(d.bowlTeam);
+            document.documentElement.style.setProperty('--ta', batColor);
+            document.documentElement.style.setProperty('--tb', bowlColor);
+
+            const completedOvs = Math.floor(d.balls / 6);
+            const ballsThisOv = d.balls % 6;
+
+            // ── Commentary & events ───────────────────────────
+            if (_prevData) {
+                const prev = _prevData;
+                const evType = detectBallEvent(d, prev);
+                const lastBall = (d.recentBalls || []).slice(-1)[0];
+                const runsScored = getRunsFromBall(lastBall);
+
+                // Over end
+                if (completedOvs > lastOverCount && ballsThisOv === 0 && d.balls > 0) {
+                    const dur = uiSt.autoOverPopup ? (uiSt.overPopupDur || 8) : 0;
+                    if (uiSt.autoOverPopup === true) triggerAutoPopup(dur);
+                    const prevBalls = prev.recentBalls || [];
+                    showOverPlayers(d, completedOvs, prevBalls.length ? prevBalls : []);
+                    $('overBadge').textContent = `⬜ END OF OVER ${completedOvs}`;
+
+                    // Over-end commentary
+                    const ovRuns = prevBalls.reduce((s, v) =>
+                        s + (typeof v === 'number' ? v : (v && typeof v === 'string' ? (parseInt(v.replace(/\D/g, '')) || 0) : 0)), 0);
+                    CC.thisOverRuns = ovRuns;
+                    const ctx = buildCtx(d);
+                    ctx.bowler = prev.bwn || '';
+                    ctx.overNum = completedOvs;
+                    const ovLine = genLine('over_end', ctx);
+                    showTicker(ovLine, `OVER ${completedOvs} DONE`, 'green');
+                    playOverEnd();
+                    setTimeout(() => enqueueSpeech(ovLine), 700);
+                }
+
+                // Ball-by-ball commentary
+                if (evType && evType !== 'over_end') {
+                    let ballEvent = evType;
+                    if (evType === 'six') ballEvent = 'six';
+                    else if (evType === 'four') ballEvent = 'four';
+                    else if (evType === 'wicket') ballEvent = 'wicket';
+                    else if (evType === 'run') ballEvent = 'run';
+                    else if (evType === 'dot') ballEvent = 'dot';
+
+                    // Tones
+                    if (ballEvent === 'wicket') {
+                        playWicket();
+                        if (uiSt.autoWicketOverlay !== false) {
+                            const striker = prev.str === 1 ? prev.p1n : prev.p2n;
+                            const bowler = prev.bwn || '';
+                            showEventPlayer(bowler, '💥', `${bowler} — WICKET!`, `${striker} dismissed`, 'red');
+                        }
+                    } else if (ballEvent === 'six') {
+                        playSix();
+                        if (uiSt.autoSixOverlay !== false) {
+                            const striker = prev.str === 1 ? prev.p1n : prev.p2n;
+                            const sR = d.str === 1 ? (d.p1r || 0) : (d.p2r || 0);
+                            showEventPlayer(striker, '🚀', `${sR} RUNS`, 'MAXIMUM SIX!', 'purple');
+                        }
+                    } else if (ballEvent === 'four') {
+                        playFour();
+                        if (uiSt.autoFourOverlay !== false) {
+                            const striker = prev.str === 1 ? prev.p1n : prev.p2n;
+                            const sR = d.str === 1 ? (d.p1r || 0) : (d.p2r || 0);
+                            showEventPlayer(striker, '🔥', `${sR} RUNS`, 'BOUNDARY FOUR!', 'blue');
+                        }
+                    }
+
+                    // Commentary dispatch
+                    setTimeout(() => {
+                        selectAndSpeak(d, prev, ballEvent, runsScored);
+                    }, ballEvent === 'wicket' ? 500 : 220);
+                }
+
+                // Player milestones
+                checkPlayerMilestones(d, prev);
+
+                // Win detection
+                if (d.innings === 2 && !_winShown) {
+                    const target = d.target || 0;
+                    const maxBalls = (d.maxOvers || 20) * 6;
+                    const allOut = d.wkts >= 10;
+                    const oversUp = d.balls >= maxBalls;
+                    const needed = target - d.runs;
+                    if (needed <= 0)
+                        showWinOverlay(d, d.batTeam, `${d.batTeam} won by ${10 - d.wkts} wicket${(10 - d.wkts) !== 1 ? 's' : ''}`, 'win');
+                    else if (needed === 1 && (allOut || oversUp))
+                        showWinOverlay(d, '', `Both teams scored ${d.runs} — match tied!`, 'tie');
+                    else if ((allOut || oversUp) && needed > 1)
+                        showWinOverlay(d, d.bowlTeam, `${d.bowlTeam} won by ${needed - 1} run${(needed - 1) !== 1 ? 's' : ''}`, 'win');
+                }
+            }
+
+            lastOverCount = Math.floor(d.balls / 6);
+            _prevData = JSON.parse(JSON.stringify(d));
+
+            // ── SCORE BAR ──────────────────────────────────────
+            $('dTeam').textContent = d.batTeam || 'TEAM';
+            $('dRuns').textContent = d.runs;
+            $('dWkts').textContent = d.wkts;
+            const oStr = `${Math.floor(d.balls / 6)}.${d.balls % 6}`;
+            $('dOvs').textContent = oStr;
+            $('dP1n').textContent = d.p1n; $('dP1r').textContent = d.p1r; $('dP1b').textContent = d.p1b;
+            $('dP2n').textContent = d.p2n; $('dP2r').textContent = d.p2r; $('dP2b').textContent = d.p2b;
+            $('p1box').className = d.str === 1 ? 'bat-row on' : 'bat-row';
+            $('p2box').className = d.str === 2 ? 'bat-row on' : 'bat-row';
+            setPhoto($('sbP1Photo'), d.p1n);
+            setPhoto($('sbP2Photo'), d.p2n);
+            $('dBwn').textContent = d.bwn;
+            $('dBwr').textContent = d.bwr;
+            $('dBww').textContent = d.bww;
+            $('dBwb').textContent = `${Math.floor(d.bwb / 6)}.${d.bwb % 6}`;
+            setPhoto($('sbBwlPhoto'), d.bwn);
+
+            if (d.target > 0) {
+                $('tgtBadge').className = 'tgt-badge on';
+                $('dTgt').textContent = d.target;
+                const bL = (d.maxOvers || 20) * 6 - d.balls;
+                $('dNeed').textContent = Math.max(0, d.target - d.runs);
+                $('dNeedOv').textContent = `${Math.floor(bL / 6)}.${bL % 6}`;
+            } else {
+                $('tgtBadge').className = 'tgt-badge';
+            }
+            $('fhBadge').className = d.freeHit ? 'fh-badge on' : 'fh-badge';
+
+            const ovDec = d.balls / 6;
+            const crr = ovDec > 0 ? (d.runs / ovDec).toFixed(2) : '0.00';
+            $('dCRR').textContent = crr;
+            if (d.target > 0) {
+                $('rrrWrap').style.display = '';
+                const bL2 = (d.maxOvers || 20) * 6 - d.balls;
+                $('dRRR').textContent = bL2 > 0 ? ((d.target - d.runs) / (bL2 / 6)).toFixed(2) : '∞';
+            } else {
+                $('rrrWrap').style.display = 'none';
+            }
+            if (d.inn1Score) {
+                $('inn1Wrap').style.display = '';
+                $('dInn1').textContent = `${d.inn1Bat} ${d.inn1Score}`;
+            } else {
+                $('inn1Wrap').style.display = 'none';
+            }
+
+            const og = $('og'); og.innerHTML = '';
+            const hist = d.recentBalls || [];
+            for (let i = 0; i < Math.max(6, hist.length); i++) {
+                const v = i < hist.length ? hist[i] : '';
+                og.innerHTML += `<div class="ball ${v === '' ? '' : ballCls(v)}">${v === '' ? '·' : v}</div>`;
+            }
+            const bar = $('scoreBar');
+            bar.classList.remove('uf'); void bar.offsetWidth; bar.classList.add('uf');
+
+            // ── SCORECARD ──────────────────────────────────────
+            $('scTeamName').textContent = d.batTeam || 'TEAM';
+            $('scTournament').textContent = d.inn1Score
+                ? `After ${d.inn1Bat}: ${d.inn1Score}`
+                : (d.maxOvers ? `${d.maxOvers} OVERS MATCH` : 'T20 MATCH');
+            $('scInnLbl').textContent = d.innings === 2 ? '2ND INNINGS' : '1ST INNINGS';
+            $('scTotalVal').textContent = `${d.runs}/${d.wkts}`;
+            $('scTotalDetail').textContent = `OVERS ${oStr}`;
+            $('scHdrColor').style.background = batColor;
+            $('scHdrMain').style.background = `linear-gradient(90deg,${batColor} 0%,rgba(12,12,28,.98) 45%,rgba(12,12,28,.98) 100%)`;
+            $('scBowlTeamName').textContent = d.bowlTeam || 'BOWLING';
+            $('scBowlHdrColor').style.background = bowlColor;
+            $('scBowlHdrMain').style.background = `linear-gradient(90deg,${bowlColor} 0%,rgba(12,12,28,.98) 45%,rgba(12,12,28,.98) 100%)`;
+
+            if (d.target > 0) {
+                $('needBar').className = 'need-bar on';
+                $('scTgtV').textContent = d.target;
+                const bL3 = (d.maxOvers || 20) * 6 - d.balls;
+                $('scNdV').textContent = Math.max(0, d.target - d.runs);
+                $('scNdOvV').textContent = `${Math.floor(bL3 / 6)}.${bL3 % 6}`;
+                $('scRRRV').textContent = bL3 > 0 ? ((d.target - d.runs) / (bL3 / 6)).toFixed(2) : '∞';
+            } else {
+                $('needBar').className = 'need-bar';
+            }
+
+            let ext = 0;
+            (d.bowlRows || []).forEach(r => {
+                ext += (r.wides || 0) + (r.noballs || 0) + (r.byes || 0) + (r.legbyes || 0);
+            });
+            $('scExtVal').textContent = ext;
+            $('scOvVal').textContent = oStr;
+            $('scCRRVal').textContent = crr;
+            $('scTotFooter').textContent = `${d.runs}/${d.wkts}`;
+            $('scBwlExt').textContent = (d.bowlRows || []).reduce((s, r) => s + (r.wides || 0) + (r.noballs || 0), 0);
+            $('scBwlOv').textContent = oStr;
+            $('scBwlTotal').textContent = `${d.runs}/${d.wkts}`;
+
+            // Batting rows
+            const batCont = $('scBatRows'); batCont.innerHTML = '';
+            let fowItems = [], fowCount = 0;
+            (d.batRows || []).forEach((row, i) => {
+                const isStr = (d.str === 1 && d.p1n === row.name) || (d.str === 2 && d.p2n === row.name);
+                const isCr = d.p1n === row.name || d.p2n === row.name;
+                const sr = row.balls > 0 ? ((row.runs / row.balls) * 100).toFixed(0) : '—';
+                let howOut = '', howStyle = '';
+                if (row.out) {
+                    howOut = row.howOut || 'out'; howStyle = 'color:#888';
+                    fowCount++;
+                    fowItems.push(`<span class="sc-fow-item"><b>${fowCount}.</b> ${row.name} ${row.runs}</span>`);
+                } else if (isStr) {
+                    howOut = '★ batting'; howStyle = 'color:var(--gold)';
+                } else if (isCr) {
+                    howOut = 'not out'; howStyle = 'color:#06d6a0';
+                }
+                const photo = getPhoto(row.name);
+                const div = document.createElement('div');
+                div.className = ['sc-row bat-row-sc', row.out ? 'dis-row' : '', isStr ? 'hlt' : '', i % 2 === 0 ? 'alt' : ''].filter(Boolean).join(' ');
+                div.innerHTML = `<img class="sc-player-photo" src="${photo}" alt="${row.name}"><span class="sc-cell left ${isStr ? 'strike' : ''}">${isStr ? '● ' : ''} ${row.name}</span><span class="sc-cell how" style="${howStyle}">${howOut}</span><span class="sc-cell ${isStr ? 'gold' : ''}">${row.runs}</span><span class="sc-cell">${row.balls}</span><span class="sc-cell">${row.fours || 0}</span><span class="sc-cell">${row.sixes || 0}</span><span class="sc-cell" style="font-size:18px;color:#888">${sr}</span>`;
+                batCont.appendChild(div);
+            });
+            $('scFow').innerHTML = `<span class="sc-fow-lbl">Fall of Wickets</span>` +
+                (fowItems.length
+                    ? fowItems.join('')
+                    : `<span style="color:#444;font-style:italic;font-size:12px">—</span>`);
+
+            // Bowling rows
+            const bwlCont = $('scBwlRows'); bwlCont.innerHTML = '';
+            (d.bowlRows || []).forEach((row, i) => {
+                const hasBowled = row.balls > 0 || (row.wides || 0) > 0 || (row.noballs || 0) > 0;
+                const isCur = d.bwn === row.name;
+                const oSt = `${Math.floor(row.balls / 6)}.${row.balls % 6}`;
+                const eco = row.balls > 0 ? (row.runs / (row.balls / 6)).toFixed(1) : '—';
+                const eNum = parseFloat(eco);
+                const eCls = eNum < 7 ? 'green' : (eNum > 10 ? 'red' : '');
+                const div = document.createElement('div');
+                div.className = ['sc-row', !hasBowled ? 'dnb-row' : '', isCur ? 'hlt' : '', i % 2 === 0 && hasBowled ? 'alt' : ''].filter(Boolean).join(' ');
+                div.innerHTML = `<span class="sc-cell left ${isCur ? 'gold' : ''}">${isCur ? '▶ ' : ''}${row.name}</span><span class="sc-cell">${hasBowled ? oSt : '—'}</span><span class="sc-cell">${hasBowled ? 0 : '—'}</span><span class="sc-cell">${hasBowled ? row.runs : '—'}</span><span class="sc-cell gold">${hasBowled ? row.wkts : '—'}</span><span class="sc-cell ${eCls}">${hasBowled ? eco : '—'}</span>`;
+                bwlCont.appendChild(div);
+            });
+        }
+    </script>
+</body>
+
+</html>

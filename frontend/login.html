@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login — Cricket Live Production</title>
+<meta name="description" content="Sign in to the Cricket Live scoring, streaming and AI ball tracking console.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  body { min-height: 100vh; display: grid; place-items: center; background:
+    radial-gradient(900px 500px at 10% 0%, #dbe7f5 0, transparent 60%),
+    radial-gradient(800px 500px at 100% 100%, #e3f2e9 0, transparent 55%), var(--bg); }
+  .box { width: min(420px, 92vw); background: #fff; border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 18px 50px rgba(26,58,92,.15); overflow: hidden; }
+  .top { background: linear-gradient(135deg, var(--navy), var(--navy2)); color: #fff; padding: 26px 28px; }
+  .top h1 { font-size: 32px; } .top p { margin: 4px 0 0; opacity: .75; letter-spacing: 2px; font-size: 11px; font-weight: 700; }
+  form { padding: 26px 28px 30px; display: grid; gap: 16px; }
+  .pw { position: relative; } .pw button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; cursor: pointer; font-size: 16px; padding: 6px 8px; }
+  #err { color: var(--red); font-weight: 600; min-height: 18px; font-size: 13px; }
+  .ball { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #ff6b7d, var(--red)); margin-right: 8px; vertical-align: -2px; }
+</style>
+</head>
+<body>
+<main class="box">
+  <div class="top"><h1><span class="ball"></span>CRICKET LIVE</h1><p>PRODUCTION CONSOLE</p></div>
+  <form id="f" autocomplete="on">
+    <label class="f">Username<input class="in" id="u" name="username" autocomplete="username" required autofocus></label>
+    <label class="f">Password
+      <span class="pw"><input class="in" id="p" name="password" type="password" autocomplete="current-password" required>
+      <button type="button" id="eye" aria-label="Show or hide password">👁</button></span>
+    </label>
+    <div id="err" role="alert"></div>
+    <button class="btn primary lg" id="go" type="submit" style="justify-content:center">Login</button>
+    <div class="hint">First run? The admin password is printed in the server console (or set <code>ADMIN_PASSWORD</code> in <code>.env</code>).</div>
+  </form>
+</main>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  let next = q.get("next") || "/dashboard.html";
+  if (!/^\/[^\/\\]/.test(next)) next = "/dashboard.html";           // same-origin relative paths only
+  try { const me = await (await fetch("/api/me", { credentials: "same-origin" })).json(); if (me.authenticated) location.replace(next); } catch (e) {}
+  const $ = (id) => document.getElementById(id);
+  $("eye").onclick = () => { $("p").type = $("p").type === "password" ? "text" : "password"; };
+  $("f").onsubmit = async (e) => {
+    e.preventDefault(); $("err").textContent = ""; $("go").disabled = true; $("go").textContent = "Signing in…";
+    try {
+      const r = await fetch("/api/login", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: $("u").value.trim(), password: $("p").value }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || "Login failed");
+      location.replace(next);
+    } catch (err) {
+      $("err").textContent = err instanceof TypeError ? "Backend unavailable — is the server running?" : err.message;
+      $("p").value = ""; $("p").focus();
+    } finally { $("go").disabled = false; $("go").textContent = "Login"; }
+  };
+})();
+</script>
+</body>
+</html>

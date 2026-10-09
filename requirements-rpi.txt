@@ -1,0 +1,5 @@
+# Raspberry Pi deployment additions
+# Install the base requirements first.
+gpiozero>=2.0
+# Picamera2 is best installed from Raspberry Pi OS:
+# sudo apt install -y python3-picamera2

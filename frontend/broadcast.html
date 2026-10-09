@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cricket Live Broadcast Renderer</title>
+<style>
+html,body{margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;background:#000}
+#camera{position:absolute;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;display:block}
+#scoreOverlay{position:absolute;inset:0;width:100vw;height:100vh;border:0;background:transparent;display:block;pointer-events:none}
+</style>
+</head>
+<body>
+<img id="camera" src="/api/internal/raw-camera.mjpeg" alt="">
+<iframe id="scoreOverlay" src="/index.html?overlay=1" title="Score overlay"></iframe>
+</body>
+</html>

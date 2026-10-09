@@ -1,0 +1,7 @@
+opencv-python
+numpy
+openvino
+ultralytics
+pyserial
+websocket-client
+python-dotenv

@@ -1,0 +1,30 @@
+name: Cricket Live Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package release
+        run: |
+          VERSION=$(cat VERSION)
+          mkdir -p /tmp/cricket-release
+          rsync -a --exclude='.git' --exclude='.github' --exclude='.venv'             --exclude='__pycache__' --exclude='data/*.db*' --exclude='data/stream_score*'             --exclude='recordings/*' --exclude='updates/*' ./ /tmp/cricket-release/camera/
+          cd /tmp/cricket-release
+          zip -r "cricket-live-v${VERSION}.zip" camera
+          sha256sum "cricket-live-v${VERSION}.zip" > "cricket-live-v${VERSION}.zip.sha256"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(cat VERSION)
+          gh release create "v${VERSION}"             "/tmp/cricket-release/cricket-live-v${VERSION}.zip"             "/tmp/cricket-release/cricket-live-v${VERSION}.zip.sha256"             --generate-notes --title "Cricket Live v${VERSION}"
