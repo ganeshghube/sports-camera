@@ -677,15 +677,41 @@ class Publisher:
         self.ws = None
         threading.Thread(target=self._run, daemon=True, name="tracker-publisher").start()
 
+
     def publish(self, msg):
+        # Keep only the newest preview frame; preserve status/command messages.
+        if isinstance(msg, (bytes, bytearray)):
+            try:
+                with self.q.mutex:
+                    items = self.q.queue
+                    kept = [
+                        item for item in items
+                        if not isinstance(item, (bytes, bytearray))
+                    ]
+                    removed = len(items) - len(kept)
+                    items.clear()
+                    items.extend(kept)
+                    self.q.unfinished_tasks = max(
+                        0, self.q.unfinished_tasks - removed
+                    )
+                    self.q.not_full.notify_all()
+            except Exception as exc:
+                log(f"Preview queue cleanup failed: {exc}")
+            except Exception:
+                pass
+
         try:
             self.q.put_nowait(msg)
         except queue.Full:
             try:
                 self.q.get_nowait()
-                self.q.put_nowait(msg)
-            except Exception:
+            except queue.Empty:
                 pass
+            try:
+                self.q.put_nowait(msg)
+            except queue.Full:
+                pass
+
 
     def _run(self):
         try:
@@ -698,9 +724,9 @@ class Publisher:
             ws = None
             try:
                 ws = websocket.create_connection(self.url, timeout=5, enable_multithread=True)
-                ws.settimeout(0.2)
+                ws.settimeout(0.002)
                 try:
-                    ws.sock.settimeout(0.2)
+                    ws.sock.settimeout(0.002)
                 except Exception:
                     pass
                 self.ws = ws
@@ -823,11 +849,17 @@ def main():
     if not detector.ready:
         log(f"AI OFFLINE: {detector.error}  (will keep running; use reload_model)")
 
-    if motor_driver == "gpio":
+    if motor_driver in ("gpio", "uln2003"):
         try:
-            from hardware.stepper_gpio import GpioStepperPanTilt
-            controller = GpioStepperPanTilt(pan_step_pin, pan_dir_pin, tilt_step_pin, tilt_dir_pin,
-                                            GPIO_MAX_PAN_SPS, GPIO_MAX_TILT_SPS, log)
+            if motor_driver == "uln2003":
+                from hardware.stepper_gpio import ULN2003PanTilt
+                # The four existing pin fields map to ULN2003 IN1, IN2, IN3, IN4.
+                controller = ULN2003PanTilt(pan_step_pin, pan_dir_pin, tilt_step_pin, tilt_dir_pin,
+                                            max_pan_sps=250, log=log)
+            else:
+                from hardware.stepper_gpio import GpioStepperPanTilt
+                controller = GpioStepperPanTilt(pan_step_pin, pan_dir_pin, tilt_step_pin, tilt_dir_pin,
+                                                GPIO_MAX_PAN_SPS, GPIO_MAX_TILT_SPS, log)
         except Exception as exc:
             log(f"GPIO motor setup failed; motors disabled: {exc}")
             controller = PanTiltController(SERIAL_PORT, SERIAL_BAUDRATE, False)
@@ -1029,7 +1061,7 @@ def main():
                     "motor_target_x": round(w * TARGET_X, 1), "motor_target_y": round(h * TARGET_Y, 1),
                 })
 
-            if (PREVIEW_STREAM and pub.connected and pub.q.qsize() < 12
+            if (PREVIEW_STREAM and pub.connected
                     and now - last_preview >= 1.0 / max(1, PREVIEW_FPS)):
                 last_preview = now
                 try:

@@ -321,9 +321,9 @@ def build_router(store, require_user, current_user, log, root: Path,
             "dest": s.get("dest", {}),
             "yt_meta": s.get("yt_meta", {"title": "Cricket Live", "description": "", "privacy": "unlisted", "category": "17", "latency": "ultraLow"}),
             "youtube_latency": str(s.get("youtube_latency") or os.environ.get("YOUTUBE_LATENCY", "ultraLow")),
-            "youtube_resolution": str(s.get("youtube_resolution") or os.environ.get("YOUTUBE_RESOLUTION", "1080p")),
-            "youtube_fps": int(s.get("youtube_fps", os.environ.get("YOUTUBE_FPS", 60))),
-            "youtube_bitrate_k": int(s.get("youtube_bitrate_k", os.environ.get("YOUTUBE_BITRATE_K", 17000))),
+            "youtube_resolution": str(s.get("youtube_resolution") or os.environ.get("YOUTUBE_RESOLUTION", "720p")),
+            "youtube_fps": int(s.get("youtube_fps", os.environ.get("YOUTUBE_FPS", 30))),
+            "youtube_bitrate_k": int(s.get("youtube_bitrate_k", os.environ.get("YOUTUBE_BITRATE_K", 3000))),
             "youtube_audio_bitrate_k": int(s.get("youtube_audio_bitrate_k", os.environ.get("YOUTUBE_AUDIO_BITRATE_K", 128))),
             "youtube_profile": str(s.get("youtube_profile", os.environ.get("YOUTUBE_PROFILE", "performance"))),
             "auto_camera_track": bool(s.get("auto_camera_track", True)),
@@ -689,20 +689,20 @@ def build_router(store, require_user, current_user, log, root: Path,
                             "quality": 17000}
                 video_k = max(3000, min(60000, int(s.get("youtube_bitrate_k", defaults.get(profile, 12000)))))
                 audio_k = max(64, min(384, int(s.get("youtube_audio_bitrate_k", 128))))
-                preset = {"performance": "veryfast", "balanced": "veryfast", "quality": "faster"}.get(profile, "veryfast")
+                preset = "ultrafast"
             else:
                 fps = max(15, min(60, int(s.get("fps", 30))))
                 width = height = None
                 video_k = int(s.get("video_bitrate_k", 4500))
                 audio_k = 96
-                preset = os.environ.get("STREAM_X264_PRESET", "veryfast")
+                preset = os.environ.get("STREAM_X264_PRESET", "ultrafast")
             cmd = [ffmpeg_bin()] + ["-hide_banner", "-loglevel", "warning"] + [
                 "-fflags", "nobuffer+discardcorrupt", "-flags", "low_delay",
                 "-analyzeduration", "200000", "-probesize", "256k", "-thread_queue_size", "8",
+                "-use_wallclock_as_timestamps", "1",
                 "-f", "mpjpeg", "-i", internal_mjpeg_url(),
                 "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
                 "-map", "0:v:0", "-map", "1:a:0",
-                "-use_wallclock_as_timestamps", "1",
                 "-r", str(fps),
                 "-c:v", "libx264", "-preset", preset,
                 "-tune", "zerolatency",
@@ -920,6 +920,11 @@ def build_router(store, require_user, current_user, log, root: Path,
             if action == "start":
                 if job and job.alive():
                     return recording_status()
+                if rec.get("started") and not rec.get("paused") and rec.get("final_name") is None:
+                    # A previous recording stopped unexpectedly; finalize its
+                    # valid files before beginning another session.
+                    finalize_recording_parts()
+                    rec["started"] = None
                 try:
                     body = await request.json()
                 except Exception:
@@ -971,7 +976,6 @@ def build_router(store, require_user, current_user, log, root: Path,
     def recording_group_key(name):
         stem = Path(name).stem
         stem = re.sub(r"_part\d{2}(?:_\d+)?$", "", stem, flags=re.I)
-        stem = re.sub(r"_20\d{2}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}.*$", "", stem, flags=re.I)
         stem = re.sub(r"_complete$", "", stem, flags=re.I)
         return stem
 
@@ -1218,9 +1222,9 @@ def build_router(store, require_user, current_user, log, root: Path,
 
     def _youtube_quality():
         s = settings()
-        res = str(s.get("youtube_resolution", "1080p"))
-        fps = 60 if int(s.get("youtube_fps", 60)) >= 60 else 30
-        bitrate = int(s.get("youtube_bitrate_k", 17000))
+        res = str(s.get("youtube_resolution", "720p"))
+        fps = 60 if int(s.get("youtube_fps", 30)) >= 60 else 30
+        bitrate = int(s.get("youtube_bitrate_k", 3000))
         audio = int(s.get("youtube_audio_bitrate_k", 128))
         defaults = {
             ("720p", 30): 8000, ("720p", 60): 8000,
@@ -1235,7 +1239,7 @@ def build_router(store, require_user, current_user, log, root: Path,
     def _youtube_latency():
         s = settings()
         latency = str(s.get("youtube_latency", "ultraLow"))
-        if str(s.get("youtube_resolution", "1080p")) == "2160p":
+        if str(s.get("youtube_resolution", "720p")) == "2160p":
             return "normal"
         return latency if latency in {"normal", "low", "ultraLow"} else "normal"
 
