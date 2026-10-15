@@ -23,14 +23,13 @@
 <section class="cl-card">
   <div class="hd">Application Version</div>
   <div class="bd row">
-    <div><div class="hint">Installed version</div><div class="big-version" id="current">—</div></div>
-    <div><div class="hint">Available version</div><div class="big-version" id="available">—</div></div>
+    <div><div class="hint">Current version</div><div class="big-version" id="current">—</div></div>
+    <div><div class="hint">Available at remote server</div><div class="big-version" id="available">—</div></div>
     <span class="grow" style="flex:1"></span>
-    <button class="btn primary lg" id="check">🔄 Check for Updates</button>
-    <button class="btn green lg" id="update" disabled>⬆ Update &amp; Restart</button>
+    <button class="btn green lg" id="update" disabled>⬆ Install and Restart</button>
   </div>
   <div class="bd" style="padding-top:0">
-    <div id="updateMsg" class="hint">GitHub/manifest update source status will appear here.</div>
+    <div id="updateMsg" class="hint">Checking the remote update package…</div>
     <div class="progress" id="progress"><div></div></div>
   </div>
 </section>
@@ -56,7 +55,7 @@
   </div>
   <div class="sys-card">
     <h3>🏭 Factory Reset</h3>
-    <p>Deletes application data, settings and recordings and restores factory defaults. System files and application binaries are preserved.</p>
+    <p>Resets application configuration and stored application data to defaults. Application files, system files, and recordings are preserved.</p>
     <button class="btn danger lg" id="reset">Factory Reset</button>
   </div>
   <div class="sys-card">
@@ -83,33 +82,38 @@
   network();
   async function check(){
     try{
-      $("check").disabled=true;$("update").disabled=true;$("updateMsg").textContent="Checking for latest version…";
+      $("update").disabled=true;$("updateMsg").textContent="Checking remote version…";
       const r=await CL.api("/api/system/update/check");
-      $("current").textContent=r.current_version||"—";$("available").textContent=r.available_version||"—";
-      if(r.update_available){$("update").disabled=false;$("updateMsg").textContent=`GitHub release ${r.available_version} is available. ${r.release_notes||""}`.trim()}
-      else $("updateMsg").textContent=r.configured?(r.source==="github"?`GitHub: ${r.available_version||r.current_version} — you are up to date.`:"You are on the latest version."):"GitHub updates are not configured. Set GITHUB_REPO=owner/repository in .env.";
-    }catch(e){show(e.message,true)}finally{$("check").disabled=false}
+      $("current").textContent=r.current_version||"—";
+      $("available").textContent=r.available_version||"—";
+      if(!r.ok) throw new Error(r.error||"Could not check the remote update server");
+      if(r.update_available){
+        $("update").disabled=false;
+        $("update").textContent=`⬆ Version ${r.available_version} available — Install and Restart`;
+        $("updateMsg").textContent=(r.release_notes||"A new version is available to install.").trim();
+      } else {
+        $("update").textContent="You are up to date";
+        $("updateMsg").textContent=r.configured?"No newer version is available on the remote server.":"Remote updates are not configured. Set GITHUB_REPO=owner/repository in .env.";
+      }
+    }catch(e){$("updateMsg").textContent=e.message;}
   }
-  $("check").onclick=check;
   $("update").onclick=async()=>{
-    if(!confirm("Install the available software update and restart the application?")) return;
+    if(!confirm("Install version "+$("available").textContent+" and restart the application?")) return;
     try{
-      $("update").disabled=true;$("check").disabled=true;$("progress").classList.add("on");$("updateMsg").textContent="Downloading, validating and installing update…";
+      $("update").disabled=true;$("progress").classList.add("on");$("updateMsg").textContent="Downloading, validating and installing update…";
       const installed=await CL.api("/api/system/update/install",{method:"POST"});
       if(installed && installed.ok){
         $("updateMsg").textContent="Update installed. Restarting application…";
         await CL.api("/api/system/restart",{method:"POST"});
-      } else {
-        throw new Error(installed?.error || "Update installation failed");
-      }
-    }catch(e){show(e.message,true);$("progress").classList.remove("on");$("check").disabled=false}
+      } else throw new Error(installed?.error || "Update installation failed");
+    }catch(e){show(e.message,true);$("progress").classList.remove("on");$("update").disabled=false}
   };
   $("restart").onclick=async()=>{
     if(!confirm("Restart the Cricket Live application now?")) return;
     try{await CL.api("/api/system/restart",{method:"POST"});show("Application restart requested. Reload this page after the server is back.");}catch(e){show(e.message,true)}
   };
   $("reset").onclick=async()=>{
-    const first=confirm("Factory Reset will delete application settings, match data and recordings. Continue?");
+    const first=confirm("Factory Reset will reset application configuration and stored application data. Recordings and application files will be preserved. Continue?");
     if(!first) return;
     const second=prompt('Type FACTORY RESET to confirm:');
     if(second!=="FACTORY RESET"){show("Factory reset cancelled.");return}

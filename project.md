@@ -31,7 +31,7 @@ The AI tracker is supervised by `run.py` but remains idle until Start Tracking i
 Recording uses explicit IDLE/STARTING/RECORDING/PAUSED/STOPPING/ERROR states. Start becomes Stop while active and Pause/Resume is available when valid. Streaming has the same start/stop state model. The current FFmpeg streaming path uses the selected camera source; the browser Final Output is the authoritative camera+graphics preview.
 
 ## Device Administration
-The Settings page provides version/update checking, update installation, application restart, factory reset and network/application URL information. Factory reset preserves the OS and application binaries.
+The Settings page provides current/remote version information, versioned ZIP update installation, application-only restart, configuration/data factory reset and network/application URL information. Factory reset preserves recordings, application files and the OS. Versioned update packages and `latest.json` are generated with `python tools/create_update.py` and published in the GitHub `updates/` folder.
 
 ## Runtime
 Use `python run.py` as the single launcher. It starts the FastAPI web server on `0.0.0.0:8000` and supervises the AI tracker process. The tracker does not capture frames until tracking is started.

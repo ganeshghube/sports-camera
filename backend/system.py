@@ -56,6 +56,31 @@ class SystemManager:
         repo = self._github_repo()
         if not repo:
             return None
+        # Preferred distribution: a versioned ZIP plus latest.json committed to
+        # the repository's updates/ directory. Releases remain as a backwards-compatible fallback.
+        branch = os.environ.get("GITHUB_BRANCH", "main").strip() or "main"
+        manifest_url = f"https://raw.githubusercontent.com/{repo}/{branch}/updates/latest.json"
+        try:
+            req = urllib.request.Request(manifest_url, headers=self._github_headers())
+            with urllib.request.urlopen(req, timeout=15) as r:
+                manifest = json.loads(r.read().decode("utf-8"))
+            available = str(manifest.get("version", current)).strip().lstrip("vV")
+            package_url = str(manifest.get("package_url", "")).strip()
+            if not package_url:
+                package_name = str(manifest.get("package", "")).strip()
+                if package_name:
+                    package_url = f"https://raw.githubusercontent.com/{repo}/{branch}/updates/{package_name}"
+            if package_url:
+                return {
+                    "ok": True, "current_version": current, "available_version": available,
+                    "update_available": self._version_key(available) > self._version_key(current),
+                    "configured": True, "source": "github-updates-folder",
+                    "release_notes": str(manifest.get("release_notes", "")),
+                    "package_url": package_url, "sha256": str(manifest.get("sha256", "")),
+                    "release_url": f"https://github.com/{repo}/tree/{branch}/updates",
+                }
+        except Exception as manifest_error:
+            self.log(f"Updates folder manifest unavailable; trying GitHub Releases: {manifest_error}")
         api = f"https://api.github.com/repos/{repo}/releases/latest"
         req = _ur.Request(api, headers=self._github_headers())
         with _ur.urlopen(req, timeout=15) as r:
@@ -215,16 +240,7 @@ class SystemManager:
             tracker_cfg.unlink(missing_ok=True)
         except Exception:
             pass
-        for name in ("recordings", "updates"):
-            p = self.root / name
-            if p.exists() and name == "recordings":
-                for f in p.glob("*"):
-                    try:
-                        if f.is_file() or f.is_symlink():
-                            f.unlink()
-                        elif f.is_dir():
-                            shutil.rmtree(f)
-                    except Exception:
-                        pass
+        # A factory reset affects application settings/data only. Keep user recordings,
+        # downloaded update packages, source files, models and environment configuration.
         self.log("Factory reset complete")
         return {"ok": True, "message": "Factory reset complete", "restart_required": True}

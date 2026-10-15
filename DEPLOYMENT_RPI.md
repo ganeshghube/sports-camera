@@ -43,24 +43,24 @@ Start with conservative `GPIO_MAX_*_SPS`, `PAN_GAIN`, `TILT_GAIN`, and a generou
 
 Never let the software become the only safety mechanism for the physical mount. Add mechanical end stops or a safe travel limit in the motor controller.
 
-## GitHub updates
+## GitHub updates (versioned ZIP in `updates/`)
 
-Set:
+Set these values in `.env`:
 
 ```text
 GITHUB_REPO=YOUR_ORG/YOUR_REPO
+GITHUB_BRANCH=main
 ```
 
-Create a release by pushing a tag:
+From a command prompt in the project folder, create the versioned ZIP and remote manifest:
 
 ```bash
-git tag v2.7.1
-git push origin v2.7.1
+python tools/create_update.py --version 2.8.8 --repo YOUR_ORG/YOUR_REPO --release-notes "Your update summary"
 ```
 
-The included GitHub Action packages the application and publishes the ZIP plus SHA-256 file. Devices can then use Settings -> Check for Updates.
+Commit and push the updated `VERSION` and generated `updates/` files. The script creates `updates/cricket-live-v2.8.8.zip`, a SHA-256 checksum, and `updates/latest.json`; the app checks that manifest and installs a newer version from Settings. The ZIP excludes local `.env`, runtime database/data, recordings, virtual environments, caches, and the `updates/` folder itself. During installation, user data and recordings are preserved.
 
-The updater preserves `data`, `recordings`, `.venv`, and `updates`.
+`UPDATE_MANIFEST_URL` and GitHub Releases remain supported for backward compatibility. Private repositories require a device-side `GITHUB_TOKEN`; never commit tokens. Factory Reset resets app configuration and stored app data but preserves recordings and application files. Restart Application restarts the app process only; it does not reboot the Raspberry Pi.
 
 ## v2.7.1 realtime cricket setup
 

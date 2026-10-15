@@ -161,15 +161,13 @@ The Start button becomes the red Stop button while recording.
 
 The Settings page contains:
 
-- current version
-- available update/version information
-- OTA update check/install
-- Update & Restart
-- Restart Application
-- Factory Reset
-- current hostname/application URL
+- Current version and version available at the remote server
+- Automatic update discovery and a version-specific **Install and Restart** action
+- Restart Application (application process only; no device reboot)
+- Factory Reset (configuration and stored application data; recordings and application files are preserved)
+- Current hostname/application URL
 
-Factory Reset is a destructive operation and requires a confirmation phrase.
+Factory Reset requires a confirmation phrase.
 
 ## Software updates
 
@@ -311,17 +309,28 @@ GPIO_MAX_PAN_SPS=700
 GPIO_MAX_TILT_SPS=550
 ```
 
-### GitHub automatic updates
-Set:
-```
+### GitHub versioned ZIP updates
+
+The Settings page displays **Current version** and **Available at remote server**. It checks `updates/latest.json` in the configured GitHub repository automatically; when a newer version is found, the button offers **Version X available — Install and Restart**. No separate “Check for Updates” or “Update & Restart” controls are needed.
+
+Configure `.env`:
+
+```text
 GITHUB_REPO=YOUR_ORG/YOUR_REPO
+GITHUB_BRANCH=main
 ```
-and publish releases named `vX.Y.Z` with the included GitHub Actions workflow. The device checks
-the latest release, validates the optional `.sha256` asset, installs only application source files,
-preserves `data`, `recordings`, `.venv`, and `updates`, then restarts.
 
-For private repositories set `GITHUB_TOKEN` on the device. Never commit that token.
+Create a package from a command prompt in the project folder:
 
+```bash
+python tools/create_update.py --version 2.8.8 --repo YOUR_ORG/YOUR_REPO --release-notes "Describe the changes"
+```
+
+The command creates `updates/cricket-live-v2.8.8.zip`, its `.sha256` checksum, and `updates/latest.json`. Commit and push `VERSION` and the generated `updates/` files to the configured branch. The app downloads the ZIP directly from the repository, validates its SHA-256, installs the application files, and preserves runtime data, recordings, `.env`, virtual environments and the `updates/` directory. Do not commit `.env` or access tokens. For private repositories, configure `GITHUB_TOKEN` on the device.
+
+`UPDATE_MANIFEST_URL` remains supported for deployments that already use a custom manifest. GitHub Releases are retained as a compatibility fallback when `updates/latest.json` is absent.
+
+Factory Reset clears application settings/data and authentication sessions/secrets, but preserves recordings, update packages, application files and environment configuration. Restart Application restarts only the application process, not the operating system.
 
 ## YouTube output quality (v2.6.1)
 
@@ -345,12 +354,11 @@ AI model files ship with normal application releases. There is no separate model
 
 ## v2.8 GitHub updates and AI model policy
 
-- Settings → System → Check for Updates queries the configured GitHub repository's latest published release.
-- Set `GITHUB_REPO=owner/repository` in `.env`. For a public repository no GitHub token is required.
-- The release ZIP should contain `cricket-live` in its filename, or set `GITHUB_UPDATE_ASSET` to the exact asset name.
-- The updater validates the release ZIP SHA-256 when a matching `.sha256` asset is published, then installs the application and restarts it.
-- The AI model is part of the application release. There is no separate model-download screen. If a new release contains a newer model, the normal application update replaces the model automatically.
-- User runtime data, recordings, `.env`, and the virtual environment are preserved during an update.
+- Settings automatically reads `updates/latest.json` from the configured GitHub repository and displays the current and remote versions.
+- Set `GITHUB_REPO=owner/repository` and optionally `GITHUB_BRANCH=main` in `.env`. For a public repository no GitHub token is required.
+- Run `python tools/create_update.py --version 2.8.8 --repo OWNER/REPOSITORY --release-notes "Summary"` to create a versioned ZIP, SHA-256 checksum and `latest.json` under `updates/`.
+- Commit and push the generated files to GitHub. The app validates the SHA-256, installs the ZIP and restarts the application process.
+- The AI model is part of the application package. Runtime data, recordings, `.env`, virtual environments and update packages are preserved during updates.
 
 YouTube realtime profile:
 
