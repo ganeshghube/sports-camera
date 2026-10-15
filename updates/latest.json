@@ -1,7 +1,7 @@
 {
-  "version": "2.8.8",
-  "package": "cricket-live-v2.8.8.zip",
-  "package_url": "https://raw.githubusercontent.com/ganeshghube/sports-camera/main/updates/cricket-live-v2.8.8.zip",
-  "sha256": "75e2a15f07a7780671b8417fd05d672bfd40854d1fb7edd1ef44b6bdb515e85e",
+  "version": "2.8.9",
+  "package": "cricket-live-v2.8.9.zip",
+  "package_url": "https://raw.githubusercontent.com/ganeshghube/sports-camera/main/updates/cricket-live-v2.8.9.zip",
+  "sha256": "592c7e4de3c16394f9dd25f4e4c38e037f16e0598e49f067f2a29e9622072cad",
   "release_notes": "Update description"
 }
