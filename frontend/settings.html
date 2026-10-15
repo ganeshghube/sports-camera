@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,35 +16,83 @@
 .camera-card p{margin:0;color:var(--muted);font-size:12px}
 .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 @media(max-width:800px){.camera-grid,.form-grid{grid-template-columns:1fr}}
+.profile-note{border:1px solid var(--border);border-radius:8px;padding:10px;background:#f8fafc;font-size:12px;color:var(--muted);line-height:1.6}
 </style>
 </head>
 <body>
 <div id="page">
+
 <section class="cl-card">
   <div class="hd">Camera Setup</div>
   <div class="bd">
     <div class="camera-grid">
-      <div class="camera-card" data-type="network"><h3>📡 Wi-Fi / RTSP</h3><p>Phone IP camera, Wi-Fi camera or RTSP network camera.</p></div>
-      <div class="camera-card" data-type="usb"><h3>🔌 USB Camera</h3><p>USB webcam/system camera connected to this computer or Raspberry Pi.</p></div>
-      <div class="camera-card" data-type="rpi"><h3>🥧 Raspberry Pi Camera</h3><p>CSI camera via Picamera2/libcamera (V4L2 fallback).</p></div>
+      <div class="camera-card" data-type="network">
+        <h3>📡 Wi-Fi / RTSP</h3>
+        <p>Phone IP camera, Wi-Fi camera or RTSP network camera.</p>
+      </div>
+      <div class="camera-card" data-type="usb">
+        <h3>🔌 USB Camera</h3>
+        <p>USB webcam/system camera connected to this computer or Raspberry Pi.</p>
+      </div>
+      <div class="camera-card" data-type="rpi">
+        <h3>🥧 Raspberry Pi Camera</h3>
+        <p>CSI camera via Picamera2/libcamera (V4L2 fallback).</p>
+      </div>
     </div>
+
     <div class="form-grid" style="margin-top:14px">
-      <label class="f">Wi-Fi / RTSP URL<input class="in" id="rtsp_url" placeholder="rtsp://192.168.1.50:8080/h264.sdp"></label>
-      <label class="f">Camera device<input class="in" id="camera_device" placeholder="Auto-detect"></label>
-      <label class="f">Camera name (optional)<input class="in" id="camera_name" placeholder="Leave blank for automatic detection"></label>
-      <label class="f">Resolution<select class="in" id="resolution"><option>1920x1080</option><option>1280x720</option><option>640x480</option></select></label>
-      <label class="f">FPS<select class="in" id="fps"><option>24</option><option>30</option><option>60</option></select></label>
-      <label class="f">AI Device<select class="in" id="ai_device"><option>AUTO</option><option>GPU</option><option>CPU</option></select></label>
-      <label class="f">Stream encoding<select class="in" id="encode"><option value="copy">Copy network H.264 (lowest CPU)</option><option value="x264">Re-encode H.264</option></select></label>
-      <label class="f">Video bitrate (kbps)<input class="in" id="video_bitrate_k" type="number" min="500" max="20000" value="4500"></label>
+      <label class="f">Wi-Fi / RTSP URL
+        <input class="in" id="rtsp_url" placeholder="rtsp://192.168.1.50:8080/h264.sdp">
+      </label>
+      <label class="f">Camera device
+        <input class="in" id="camera_device" placeholder="Auto-detect">
+      </label>
+      <label class="f">Camera name (optional)
+        <input class="in" id="camera_name" placeholder="Leave blank for automatic detection">
+      </label>
+      <label class="f">Resolution
+        <select class="in" id="resolution">
+          <option>1920x1080</option>
+          <option>1280x720</option>
+          <option>640x480</option>
+        </select>
+      </label>
+      <label class="f">Camera capture FPS
+        <select class="in" id="fps">
+          <option>24</option>
+          <option>30</option>
+          <option>60</option>
+        </select>
+      </label>
+      <label class="f">AI Device
+        <select class="in" id="ai_device">
+          <option>AUTO</option>
+          <option>GPU</option>
+          <option>CPU</option>
+        </select>
+      </label>
+      <label class="f">Stream encoding
+        <select class="in" id="encode">
+          <option value="copy">Copy network H.264 (lowest CPU)</option>
+          <option value="x264">Re-encode H.264</option>
+        </select>
+      </label>
+      <label class="f">Video bitrate (kbps)
+        <input class="in" id="video_bitrate_k" type="number" min="500" max="20000" value="4500">
+      </label>
     </div>
+
     <div class="row" style="margin-top:14px">
       <button class="btn" id="discover">🔎 Detect Cameras</button>
       <button class="btn" id="test">🧪 Test Selected Source</button>
       <button class="btn primary lg" id="save">💾 Save Camera / Streaming Settings</button>
-      <label class="row hint"><input type="checkbox" id="broadcastOverlay" checked> Score overlay in recording/streams</label>
+      <label class="row hint">
+        <input type="checkbox" id="broadcastOverlay" checked>
+        Score overlay in recording/streams
+      </label>
       <span class="hint" id="selectedLabel">Selected: Wi-Fi / RTSP</span>
     </div>
+
     <div id="cameraList" class="grid" style="margin-top:12px"></div>
     <div id="cameraError" class="cl-banner err" style="display:none;margin-top:10px"></div>
   </div>
@@ -53,9 +102,13 @@
   <div class="hd">Streaming Setup</div>
   <div class="bd grid g2">
     <div>
-      <label class="f">TEST MODE <span class="hint">Keep ON while testing; it prevents going live.</span>
-        <input type="checkbox" id="test_mode" style="width:20px;height:20px"></label>
-      <div class="hint" style="margin-top:8px">Configure destination stream keys below. Start/Stop controls are on Final Output.</div>
+      <label class="f">TEST MODE
+        <span class="hint">Keep ON while testing; it prevents going live.</span>
+        <input type="checkbox" id="test_mode" style="width:20px;height:20px">
+      </label>
+      <div class="hint" style="margin-top:8px">
+        Configure destination stream keys below. Start/Stop controls are on Final Output.
+      </div>
     </div>
     <div>
       <div class="stat"><span>YouTube</span><span class="badge" id="bYT">—</span></div>
@@ -66,149 +119,480 @@
 </section>
 
 <section class="grid g2">
-  <div class="cl-card"><div class="hd">YouTube</div><div class="bd" style="display:grid;gap:9px">
-    <div class="row"><button class="btn" id="ytConnect">🔗 Connect YouTube</button><button class="btn" id="ytPrepare">Create Live Broadcast</button></div>
-    <label class="f">Server URL<input class="in" id="youtube_server_url" placeholder="rtmp://a.rtmp.youtube.com/live2"></label>
-    <label class="f">Stream key<input class="in" id="youtube_stream_key" type="password" autocomplete="off" placeholder="leave blank to keep saved key"></label>
-    <label class="f">Title<input class="in" id="yt_title"></label>
-    <label class="f">Description<input class="in" id="yt_description"></label>
-    <div class="form-grid">
-      <label class="f">Privacy<select class="in" id="yt_privacy"><option>public</option><option>unlisted</option><option>private</option></select></label>
-      <label class="f">Category<select class="in" id="yt_category"><option value="17">Sports</option><option value="22">People &amp; Blogs</option><option value="24">Entertainment</option></select></label>
+  <div class="cl-card">
+    <div class="hd">YouTube</div>
+    <div class="bd" style="display:grid;gap:9px">
+      <div class="row">
+        <button class="btn" id="ytConnect">🔗 Connect YouTube</button>
+        <button class="btn" id="ytPrepare">Create Live Broadcast</button>
+      </div>
+
+      <label class="f">Server URL
+        <input class="in" id="youtube_server_url" placeholder="rtmp://a.rtmp.youtube.com/live2">
+      </label>
+      <label class="f">Stream key
+        <input class="in" id="youtube_stream_key" type="password" autocomplete="off" placeholder="Leave blank to keep saved key">
+      </label>
+      <label class="f">Title
+        <input class="in" id="yt_title">
+      </label>
+      <label class="f">Description
+        <input class="in" id="yt_description">
+      </label>
+
+      <div class="form-grid">
+        <label class="f">Privacy
+          <select class="in" id="yt_privacy">
+            <option>public</option>
+            <option>unlisted</option>
+            <option>private</option>
+          </select>
+        </label>
+        <label class="f">Category
+          <select class="in" id="yt_category">
+            <option value="17">Sports</option>
+            <option value="22">People &amp; Blogs</option>
+            <option value="24">Entertainment</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="f">YouTube quality profile
+        <select class="in" id="yt_profile">
+          <option value="performance">🏏 Real-time cricket — 720p30 · 4.5 Mbps · Ultra Low</option>
+          <option value="balanced">⚖️ Balanced — 1080p30 · 6 Mbps · Ultra Low</option>
+          <option value="quality">🎥 High motion — 1080p60 · 12 Mbps · Low</option>
+        </select>
+      </label>
+
+      <div class="form-grid">
+        <div class="stat">
+          <span>Video</span>
+          <b id="yt_quality_summary">720p / 30 FPS</b>
+        </div>
+        <div class="stat">
+          <span>Bitrate</span>
+          <b id="yt_bitrate_summary">4.5 Mbps</b>
+        </div>
+        <div class="stat">
+          <span>Latency mode</span>
+          <b id="yt_latency_summary">Ultra Low</b>
+        </div>
+        <div class="stat">
+          <span>Audio</span>
+          <b id="yt_audio_summary">128 kbps</b>
+        </div>
+      </div>
+
+      <div class="profile-note">
+        <b>Recommended for your current laptop:</b> start with 720p30 to reduce
+        encoding workload and avoid requesting 60 FPS from a camera that may
+        be delivering fewer frames. If performance is stable, try 1080p30.
+        Use 1080p60 only after confirming that the camera can consistently
+        supply 60 FPS. The encoder must honour these settings for them to take effect.
+      </div>
     </div>
-    <label class="f">YouTube quality profile<select class="in" id="yt_profile">
-      <option value="performance">🏏 Real-time cricket — 1080p60 · 12 Mbps · Ultra Low</option>
-      <option value="balanced">⚖️ Balanced — 1080p60 · 14 Mbps · Low</option>
-      <option value="quality">🎥 High quality — 1080p60 · 17 Mbps · Low</option>
-    </select></label>
-    <div class="form-grid">
-      <div class="stat"><span>Video</span><b id="yt_quality_summary">1080p / 60 FPS</b></div>
-      <div class="stat"><span>Bitrate</span><b id="yt_bitrate_summary">12 Mbps</b></div>
-      <div class="stat"><span>Latency</span><b id="yt_latency_summary">Ultra Low</b></div>
-      <div class="stat"><span>Audio</span><b>128 kbps</b></div>
+  </div>
+
+  <div class="cl-card">
+    <div class="hd">Facebook</div>
+    <div class="bd" style="display:grid;gap:9px">
+      <div class="row">
+        <button class="btn" id="fbConnect">🔗 Connect Facebook</button>
+        <button class="btn" id="fbPrepare">Create Live Video</button>
+      </div>
+      <label class="f">RTMPS server URL
+        <input class="in" id="facebook_server_url" placeholder="rtmps://live-api-s.facebook.com:443/rtmp/">
+      </label>
+      <label class="f">Stream key
+        <input class="in" id="facebook_stream_key" type="password" autocomplete="off" placeholder="Leave blank to keep saved key">
+      </label>
     </div>
-    <div class="hint">Recommended for your tripod + ball-tracking setup: <b>Real-time cricket</b>. It keeps 1080p60 while reducing encoder load and uses YouTube Ultra Low latency. YouTube notes that Ultra Low latency is normally under 5 seconds for most viewers, although network/player buffering can add delay. citeturn0search1</div>
-  </div></div>
-  <div class="cl-card"><div class="hd">Facebook</div><div class="bd" style="display:grid;gap:9px">
-    <div class="row"><button class="btn" id="fbConnect">🔗 Connect Facebook</button><button class="btn" id="fbPrepare">Create Live Video</button></div>
-    <label class="f">RTMPS server URL<input class="in" id="facebook_server_url" placeholder="rtmps://live-api-s.facebook.com:443/rtmp/"></label>
-    <label class="f">Stream key<input class="in" id="facebook_stream_key" type="password" autocomplete="off" placeholder="leave blank to keep saved key"></label>
-  </div></div>
-  <div class="cl-card"><div class="hd">Custom RTMP / RTMPS</div><div class="bd" style="display:grid;gap:9px">
-    <label class="f">Server URL<input class="in" id="custom_server_url" placeholder="rtmps://example.com/live"></label>
-    <label class="f">Stream key<input class="in" id="custom_stream_key" type="password" autocomplete="off" placeholder="leave blank to keep saved key"></label>
-    <label class="f">Username<input class="in" id="custom_username"></label>
-    <label class="f">Password/token<input class="in" id="custom_password" type="password" autocomplete="off"></label>
-  </div></div>
+  </div>
+
+  <div class="cl-card">
+    <div class="hd">Custom RTMP / RTMPS</div>
+    <div class="bd" style="display:grid;gap:9px">
+      <label class="f">Server URL
+        <input class="in" id="custom_server_url" placeholder="rtmps://example.com/live">
+      </label>
+      <label class="f">Stream key
+        <input class="in" id="custom_stream_key" type="password" autocomplete="off" placeholder="Leave blank to keep saved key">
+      </label>
+      <label class="f">Username
+        <input class="in" id="custom_username">
+      </label>
+      <label class="f">Password/token
+        <input class="in" id="custom_password" type="password" autocomplete="off">
+      </label>
+    </div>
+  </div>
 </section>
 
-<section class="cl-card"><div class="hd">Automatic Ball Camera Control</div><div class="bd form-grid">
-  <label class="f">Follow the cricket ball<select class="in" id="auto_camera_track"><option value="true">ON — camera follows the ball</option><option value="false">OFF — camera stays still</option></select></label>
-  <label class="f">Tracking sensitivity<select class="in" id="min_track_confidence"><option value="0.25">More sensitive — finds difficult balls</option><option value="0.35">Normal — recommended</option><option value="0.50">More selective — fewer false detections</option></select></label>
-  <label class="f">AI tracking speed<select class="in" id="ai_max_fps"><option value="15">15 updates/sec — lower Pi load</option><option value="20">20 updates/sec — recommended</option><option value="25">25 updates/sec — faster response</option></select></label>
-  <details style="grid-column:1/-1"><summary class="hint" style="cursor:pointer">Advanced motor setup</summary><div class="form-grid" style="margin-top:12px">
-    <label class="f">Motor driver<select class="in" id="motor_driver"><option value="none">None — tracking only</option><option value="gpio">Raspberry Pi GPIO STEP/DIR</option><option value="serial">ESP32 serial pan/tilt</option></select></label>
-    <label class="f">Pan STEP GPIO<input class="in" id="pan_step_pin" type="number" min="0" max="40"></label>
-    <label class="f">Pan DIR GPIO<input class="in" id="pan_dir_pin" type="number" min="0" max="40"></label>
-    <label class="f">Tilt STEP GPIO<input class="in" id="tilt_step_pin" type="number" min="0" max="40"></label>
-    <label class="f">Tilt DIR GPIO<input class="in" id="tilt_dir_pin" type="number" min="0" max="40"></label>
-  </div></details>
-  <div class="hint" style="grid-column:1/-1">The camera only moves when the ball is detected with enough confidence. When the ball is lost, the motors stop. Test motor direction before attaching the phone.</div>
-</div></section>
+<section class="cl-card">
+  <div class="hd">Automatic Ball Camera Control</div>
+  <div class="bd form-grid">
+    <label class="f">Follow the cricket ball
+      <select class="in" id="auto_camera_track">
+        <option value="true">ON — camera follows the ball</option>
+        <option value="false">OFF — camera stays still</option>
+      </select>
+    </label>
+
+    <label class="f">Tracking sensitivity
+      <select class="in" id="min_track_confidence">
+        <option value="0.25">More sensitive — finds difficult balls</option>
+        <option value="0.35">Normal — recommended</option>
+        <option value="0.50">More selective — fewer false detections</option>
+      </select>
+    </label>
+
+    <label class="f">AI tracking speed
+      <select class="in" id="ai_max_fps">
+        <option value="15">15 updates/sec — lower load</option>
+        <option value="20">20 updates/sec — recommended</option>
+        <option value="25">25 updates/sec — faster response</option>
+      </select>
+    </label>
+
+    <details style="grid-column:1/-1">
+      <summary class="hint" style="cursor:pointer">Advanced motor setup</summary>
+      <div class="form-grid" style="margin-top:12px">
+        <label class="f">Motor driver
+          <select class="in" id="motor_driver">
+            <option value="none">None — tracking only</option>
+            <option value="gpio">Raspberry Pi GPIO STEP/DIR</option>
+            <option value="serial">ESP32 serial pan/tilt</option>
+          </select>
+        </label>
+        <label class="f">Pan STEP GPIO
+          <input class="in" id="pan_step_pin" type="number" min="0" max="40">
+        </label>
+        <label class="f">Pan DIR GPIO
+          <input class="in" id="pan_dir_pin" type="number" min="0" max="40">
+        </label>
+        <label class="f">Tilt STEP GPIO
+          <input class="in" id="tilt_step_pin" type="number" min="0" max="40">
+        </label>
+        <label class="f">Tilt DIR GPIO
+          <input class="in" id="tilt_dir_pin" type="number" min="0" max="40">
+        </label>
+      </div>
+    </details>
+
+    <div class="hint" style="grid-column:1/-1">
+      The camera only moves when the ball is detected with enough confidence.
+      When the ball is lost, the motors stop. Test motor direction before
+      attaching the phone.
+    </div>
+  </div>
+</section>
 
 </div>
+
 <script src="js/app.js"></script>
 <script>
 (async()=>{
-  const content=await CL.shell("settings.html","Setup Camera / Streaming");
-  const $=id=>document.getElementById(id);
-  let selectedType="network", S=null;
-  const types={network:"Wi-Fi / RTSP",usb:"USB Camera",rpi:"Raspberry Pi Camera"};
-  const setB=(id,t,c)=>{$(id).textContent=t;$(id).className="badge "+(c||"");};
-  const badge=(id,d)=>{const connected=d.oauth_connected; const t=connected?"OAUTH CONNECTED":d.configured?"CONFIGURED":"NOT CONFIGURED";setB(id,t,(connected||d.configured)?"ok":"warn");};
-  document.querySelectorAll(".camera-card").forEach(card=>card.onclick=()=>{
-    selectedType=card.dataset.type;
-    document.querySelectorAll(".camera-card").forEach(x=>x.classList.toggle("selected",x===card));
-    $("selectedLabel").textContent="Selected: "+types[selectedType];
+  const content = await CL.shell("settings.html", "Setup Camera / Streaming");
+  const $ = id => document.getElementById(id);
+
+  let selectedType = "network";
+  let S = null;
+
+  const types = {
+    network: "Wi-Fi / RTSP",
+    usb: "USB Camera",
+    rpi: "Raspberry Pi Camera"
+  };
+
+  const setB = (id, t, c) => {
+    $(id).textContent = t;
+    $(id).className = "badge " + (c || "");
+  };
+
+  const badge = (id, d) => {
+    d = d || {};
+    const connected = !!d.oauth_connected;
+    const configured = !!d.configured;
+    const t = connected ? "OAUTH CONNECTED" : configured ? "CONFIGURED" : "NOT CONFIGURED";
+    setB(id, t, (connected || configured) ? "ok" : "warn");
+  };
+
+  document.querySelectorAll(".camera-card").forEach(card => {
+    card.onclick = () => {
+      selectedType = card.dataset.type;
+      document.querySelectorAll(".camera-card").forEach(x =>
+        x.classList.toggle("selected", x === card)
+      );
+      $("selectedLabel").textContent = "Selected: " + types[selectedType];
+    };
   });
-  document.querySelector('.camera-card[data-type="network"]').classList.add("selected");
-  const ytProfiles={
-    performance:{resolution:"1080p",fps:60,bitrate:12000,latency:"ultraLow",audio:128},
-    balanced:{resolution:"1080p",fps:60,bitrate:14000,latency:"low",audio:128},
-    quality:{resolution:"1080p",fps:60,bitrate:17000,latency:"low",audio:128}
-  };
-  function applyProfile(){
-    const p=ytProfiles[$("yt_profile").value]||ytProfiles.performance;
-    $("yt_quality_summary").textContent=`${p.resolution} / ${p.fps} FPS`;
-    $("yt_bitrate_summary").textContent=`${(p.bitrate/1000).toFixed(0)} Mbps`;
-    $("yt_latency_summary").textContent=p.latency==="ultraLow"?"Ultra Low":"Low";
-  }
-  $("yt_profile").onchange=applyProfile;
-  async function load(){
-    S=await CL.api("/api/settings");
-    selectedType=S.camera_type||"network";
-    document.querySelectorAll(".camera-card").forEach(x=>x.classList.toggle("selected",x.dataset.type===selectedType));
-    $("selectedLabel").textContent="Selected: "+(types[selectedType]||selectedType);
-    $("test_mode").checked=!!S.test_mode;
-    $("rtsp_url").value=S.rtsp_url||"";
-    $("camera_device").value=(S.camera_device===undefined || S.camera_device===null || S.camera_device==="")?"auto":S.camera_device;
-    $("camera_name").value=S.camera_name||"";
-    for(const k of ["resolution","fps","ai_device","encode","video_bitrate_k"]) $(k).value=S[k];
-    $("broadcastOverlay").checked = S.broadcast_overlay !== false;
-    for(const n of ["youtube","facebook","custom"]) {
-      $(n+"_server_url").value=S.dest[n].server_url||"";
+
+  const ytProfiles = {
+    performance: {
+      resolution: "720p",
+      fps: 30,
+      bitrate: 4500,
+      latency: "ultraLow",
+      audio: 128
+    },
+    balanced: {
+      resolution: "1080p",
+      fps: 30,
+      bitrate: 6000,
+      latency: "ultraLow",
+      audio: 128
+    },
+    quality: {
+      resolution: "1080p",
+      fps: 60,
+      bitrate: 12000,
+      latency: "low",
+      audio: 128
     }
-    $("yt_title").value=S.yt_meta.title||""; $("yt_description").value=S.yt_meta.description||"";
-    $("yt_privacy").value=S.yt_meta.privacy||"unlisted"; $("yt_category").value=S.yt_meta.category||"17";
-    $("yt_profile").value=S.youtube_profile||"performance";
-    applyProfile();
-    $("auto_camera_track").value=String(S.auto_camera_track!==false);
-    $("min_track_confidence").value=S.min_track_confidence||0.35;
-    $("ai_max_fps").value=S.ai_max_fps||20;
-    $("motor_driver").value=S.motor_driver||"none";$("pan_step_pin").value=S.pan_step_pin??17;$("pan_dir_pin").value=S.pan_dir_pin??27;$("tilt_step_pin").value=S.tilt_step_pin??22;$("tilt_dir_pin").value=S.tilt_dir_pin??23;
-    badge("bYT",S.dest.youtube);badge("bFB",S.dest.facebook);badge("bCU",S.dest.custom);
-    $("ytConnect").disabled=!S.oauth_available.youtube; $("fbConnect").disabled=!S.oauth_available.facebook;
-  }
-  async function discover(){
-    try{
-      $("cameraError").style.display="none";
-      const r=await CL.api("/api/cameras");
-      $("cameraList").innerHTML=r.cameras.length?r.cameras.map(c=>`<div class="cl-card"><div class="bd row"><b>${CL.esc(c.name)}</b><span class="hint">${CL.esc(c.type)} · ${CL.esc(c.device)}</span><button class="btn" style="margin-left:auto">Use Camera</button></div></div>`).join(""):'<div class="hint">No attached USB/Pi camera detected. You can still configure a Wi-Fi/RTSP URL.';
-      [...$("cameraList").querySelectorAll("button")].forEach((b,i)=>b.onclick=()=>{
-        const c=r.cameras[i]; selectedType=c.type; $("camera_device").value=c.device??0; $("camera_name").value=c.name||""; $("selectedLabel").textContent="Selected: "+(types[selectedType]||selectedType);
-        document.querySelectorAll(".camera-card").forEach(x=>x.classList.toggle("selected",x.dataset.type===selectedType));
-      });
-    }catch(e){$("cameraError").style.display="";$("cameraError").textContent=e.message}
-  }
-  $("discover").onclick=discover;
-  $("test").onclick=async()=>{try{await CL.api("/api/camera/start",{method:"POST"});const r=await CL.api("/api/camera/status");CL.toast(r.connected?"Camera source is working":"Camera started; waiting for frames",!r.connected)}catch(e){CL.toast(e.message,true)}};
-  $("save").onclick=async()=>{
-    try{
-      const dest={};
-      for(const n of ["youtube","facebook","custom"]) dest[n]={server_url:$(n+"_server_url").value,stream_key:$(n+"_stream_key").value};
-      dest.custom.username=$("custom_username").value;dest.custom.password=$("custom_password").value;
-      S=await CL.api("/api/settings",{method:"PUT",body:{
-        test_mode:$("test_mode").checked,camera_type:selectedType,camera_device:$("camera_device").value,camera_name:$("camera_name").value,
-        rtsp_url:$("rtsp_url").value,resolution:$("resolution").value,fps:+$("fps").value,ai_device:$("ai_device").value,
-        encode:$("encode").value,video_bitrate_k:+$("video_bitrate_k").value||4500,broadcast_overlay:$("broadcastOverlay").checked,
-        yt_meta:{title:$("yt_title").value,description:$("yt_description").value,privacy:$("yt_privacy").value,category:$("yt_category").value},
-         youtube_latency:(ytProfiles[$("yt_profile").value]||ytProfiles.performance).latency,
-         youtube_resolution:(ytProfiles[$("yt_profile").value]||ytProfiles.performance).resolution,
-         youtube_fps:(ytProfiles[$("yt_profile").value]||ytProfiles.performance).fps,
-         youtube_bitrate_k:(ytProfiles[$("yt_profile").value]||ytProfiles.performance).bitrate,
-         youtube_audio_bitrate_k:(ytProfiles[$("yt_profile").value]||ytProfiles.performance).audio,
-         youtube_profile:$("yt_profile").value,
-         auto_camera_track:$("auto_camera_track").value==="true",min_track_confidence:+$("min_track_confidence").value||0.35,ai_max_fps:+$("ai_max_fps").value||20,
-         motor_driver:$("motor_driver").value,pan_step_pin:+$("pan_step_pin").value||17,pan_dir_pin:+$("pan_dir_pin").value||27,tilt_step_pin:+$("tilt_step_pin").value||22,tilt_dir_pin:+$("tilt_dir_pin").value||23,dest
-      }});
-      ["youtube_stream_key","facebook_stream_key","custom_stream_key","custom_password"].forEach(k=>$(k).value="");
-      CL.toast("Camera and streaming settings saved");await load();
-    }catch(e){CL.toast(e.message,true)}
   };
-  const oauth=p=>async()=>{try{const r=await CL.api(`/api/oauth/${p}/login`);location.href=r.url}catch(e){CL.toast(e.message,true)}};
-  $("ytConnect").onclick=oauth("youtube");$("fbConnect").onclick=oauth("facebook");
-  const prep=p=>async()=>{try{const r=await CL.api(`/api/stream/${p}/prepare`,{method:"POST"});CL.toast(`${p} live target created`+(r.watch_url?` · ${r.watch_url}`:""));await load()}catch(e){CL.toast(e.message,true)}};
-  $("ytPrepare").onclick=prep("youtube");$("fbPrepare").onclick=prep("facebook");
+
+  function applyProfile() {
+    const p = ytProfiles[$("yt_profile").value] || ytProfiles.performance;
+    $("yt_quality_summary").textContent = `${p.resolution} / ${p.fps} FPS`;
+    $("yt_bitrate_summary").textContent =
+      `${(p.bitrate / 1000).toFixed(p.bitrate % 1000 ? 1 : 0)} Mbps`;
+    $("yt_latency_summary").textContent =
+      p.latency === "ultraLow" ? "Ultra Low" : "Low";
+    $("yt_audio_summary").textContent = `${p.audio} kbps`;
+  }
+
+  $("yt_profile").onchange = applyProfile;
+
+  async function load() {
+    S = await CL.api("/api/settings");
+
+    selectedType = S.camera_type || "network";
+
+    document.querySelectorAll(".camera-card").forEach(x =>
+      x.classList.toggle("selected", x.dataset.type === selectedType)
+    );
+
+    $("selectedLabel").textContent =
+      "Selected: " + (types[selectedType] || selectedType);
+
+    $("test_mode").checked = !!S.test_mode;
+    $("rtsp_url").value = S.rtsp_url || "";
+
+    $("camera_device").value =
+      S.camera_device === undefined ||
+      S.camera_device === null ||
+      S.camera_device === ""
+        ? "auto"
+        : S.camera_device;
+
+    $("camera_name").value = S.camera_name || "";
+
+    for (const k of ["resolution", "fps", "ai_device", "encode", "video_bitrate_k"]) {
+      if (S[k] !== undefined && S[k] !== null) {
+        $(k).value = String(S[k]);
+      }
+    }
+
+    $("broadcastOverlay").checked = S.broadcast_overlay !== false;
+
+    S.dest = S.dest || {};
+    S.dest.youtube = S.dest.youtube || {};
+    S.dest.facebook = S.dest.facebook || {};
+    S.dest.custom = S.dest.custom || {};
+
+    for (const n of ["youtube", "facebook", "custom"]) {
+      $(n + "_server_url").value = S.dest[n].server_url || "";
+    }
+
+    $("yt_title").value = (S.yt_meta || {}).title || "";
+    $("yt_description").value = (S.yt_meta || {}).description || "";
+    $("yt_privacy").value = (S.yt_meta || {}).privacy || "unlisted";
+    $("yt_category").value = String((S.yt_meta || {}).category || "17");
+
+    const savedProfile = S.youtube_profile;
+    $("yt_profile").value =
+      savedProfile && ytProfiles[savedProfile] ? savedProfile : "performance";
+
+    /*
+     * Do not overwrite a valid saved profile based only on old defaults.
+     * The chosen profile values are applied when the user saves settings.
+     */
+    applyProfile();
+
+    $("auto_camera_track").value = String(S.auto_camera_track !== false);
+    $("min_track_confidence").value = String(S.min_track_confidence || 0.35);
+    $("ai_max_fps").value = String(S.ai_max_fps || 20);
+
+    $("motor_driver").value = S.motor_driver || "none";
+    $("pan_step_pin").value = S.pan_step_pin ?? 17;
+    $("pan_dir_pin").value = S.pan_dir_pin ?? 27;
+    $("tilt_step_pin").value = S.tilt_step_pin ?? 22;
+    $("tilt_dir_pin").value = S.tilt_dir_pin ?? 23;
+
+    badge("bYT", S.dest.youtube);
+    badge("bFB", S.dest.facebook);
+    badge("bCU", S.dest.custom);
+
+    const oauth = S.oauth_available || {};
+    $("ytConnect").disabled = !oauth.youtube;
+    $("fbConnect").disabled = !oauth.facebook;
+  }
+
+  async function discover() {
+    try {
+      $("cameraError").style.display = "none";
+
+      const r = await CL.api("/api/cameras");
+      const cameras = Array.isArray(r.cameras) ? r.cameras : [];
+
+      $("cameraList").innerHTML = cameras.length
+        ? cameras.map(c => `
+          <div class="cl-card">
+            <div class="bd row">
+              <b>${CL.esc(c.name)}</b>
+              <span class="hint">${CL.esc(c.type)} · ${CL.esc(c.device)}</span>
+              <button class="btn" style="margin-left:auto">Use Camera</button>
+            </div>
+          </div>
+        `).join("")
+        : '<div class="hint">No attached USB/Pi camera detected. You can still configure a Wi-Fi/RTSP URL.</div>';
+
+      [...$("cameraList").querySelectorAll("button")].forEach((b, i) => {
+        b.onclick = () => {
+          const c = cameras[i];
+          selectedType = c.type;
+          $("camera_device").value = c.device ?? 0;
+          $("camera_name").value = c.name || "";
+          $("selectedLabel").textContent =
+            "Selected: " + (types[selectedType] || selectedType);
+
+          document.querySelectorAll(".camera-card").forEach(x =>
+            x.classList.toggle("selected", x.dataset.type === selectedType)
+          );
+        };
+      });
+    } catch (e) {
+      $("cameraError").style.display = "";
+      $("cameraError").textContent = e.message;
+    }
+  }
+
+  $("discover").onclick = discover;
+
+  $("test").onclick = async () => {
+    try {
+      await CL.api("/api/camera/start", { method: "POST" });
+      const r = await CL.api("/api/camera/status");
+      CL.toast(
+        r.connected ? "Camera source is working" : "Camera started; waiting for frames",
+        !r.connected
+      );
+    } catch (e) {
+      CL.toast(e.message, true);
+    }
+  };
+
+  $("save").onclick = async () => {
+    try {
+      const profile = ytProfiles[$("yt_profile").value] || ytProfiles.performance;
+      const dest = {};
+
+      for (const n of ["youtube", "facebook", "custom"]) {
+        dest[n] = {
+          server_url: $(n + "_server_url").value,
+          stream_key: $(n + "_stream_key").value
+        };
+      }
+
+      dest.custom.username = $("custom_username").value;
+      dest.custom.password = $("custom_password").value;
+
+      S = await CL.api("/api/settings", {
+        method: "PUT",
+        body: {
+          test_mode: $("test_mode").checked,
+
+          camera_type: selectedType,
+          camera_device: $("camera_device").value,
+          camera_name: $("camera_name").value,
+          rtsp_url: $("rtsp_url").value,
+          resolution: $("resolution").value,
+          fps: Number($("fps").value),
+          ai_device: $("ai_device").value,
+          encode: $("encode").value,
+          video_bitrate_k: Number($("video_bitrate_k").value) || 4500,
+          broadcast_overlay: $("broadcastOverlay").checked,
+
+          yt_meta: {
+            title: $("yt_title").value,
+            description: $("yt_description").value,
+            privacy: $("yt_privacy").value,
+            category: $("yt_category").value
+          },
+
+          youtube_latency: profile.latency,
+          youtube_resolution: profile.resolution,
+          youtube_fps: profile.fps,
+          youtube_bitrate_k: profile.bitrate,
+          youtube_audio_bitrate_k: profile.audio,
+          youtube_profile: $("yt_profile").value,
+
+          auto_camera_track: $("auto_camera_track").value === "true",
+          min_track_confidence: Number($("min_track_confidence").value) || 0.35,
+          ai_max_fps: Number($("ai_max_fps").value) || 20,
+
+          motor_driver: $("motor_driver").value,
+          pan_step_pin: Number($("pan_step_pin").value) || 17,
+          pan_dir_pin: Number($("pan_dir_pin").value) || 27,
+          tilt_step_pin: Number($("tilt_step_pin").value) || 22,
+          tilt_dir_pin: Number($("tilt_dir_pin").value) || 23,
+
+          dest
+        }
+      });
+
+      [
+        "youtube_stream_key",
+        "facebook_stream_key",
+        "custom_stream_key",
+        "custom_password"
+      ].forEach(k => $(k).value = "");
+
+      CL.toast("Camera and streaming settings saved");
+      await load();
+    } catch (e) {
+      CL.toast(e.message, true);
+    }
+  };
+
+  const oauth = p => async () => {
+    try {
+      const r = await CL.api(`/api/oauth/${p}/login`);
+      location.href = r.url;
+    } catch (e) {
+      CL.toast(e.message, true);
+    }
+  };
+
+  $("ytConnect").onclick = oauth("youtube");
+  $("fbConnect").onclick = oauth("facebook);
+
+  const prep = p => async () => {
+    try {
+      const r = await CL.api(`/api/stream/${p}/prepare`, { method: "POST" });
+      CL.toast(
+        `${p} live target created` + (r.watch_url ? ` · ${r.watch_url}` : "")
+      );
+      await load();
+    } catch (e) {
+      CL.toast(e.message, true);
+    }
+  };
+
+  $("ytPrepare").onclick = prep("youtube");
+  $("fbPrepare").onclick = prep("facebook");
+
   await load();
   await discover();
 })();

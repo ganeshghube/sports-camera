@@ -1108,35 +1108,53 @@ def build_router(store, require_user, current_user, log, root: Path,
 
         return StreamingResponse(stream(), media_type="multipart/x-mixed-replace; boundary=frame")
 
+    
     @r.get("/api/internal/camera.mjpeg")
     def internal_camera_mjpeg(request: Request):
-        """Exact Live Preview composition for FFmpeg/YouTube.
-
-        Chromium renders frontend/index.html?overlay=1 as an iframe over the
-        exact same camera sizing used by preview.html. If Chromium is unavailable
-        or temporarily stale, the existing OpenCV compositor is used immediately,
-        so a renderer problem can never terminate a live stream.
-        """
+        """Feed changed, freshly composed camera frames to FFmpeg."""
         _local_only(request)
         browser_renderer.start()
 
         def stream():
+            last_sent = None
+
             while True:
                 status = camera_status_getter() or {}
                 if not status.get("running"):
+                    last_sent = None
                     time.sleep(0.15)
                     continue
-                raw = frame_getter()
-                if raw:
-                    exact = browser_renderer.get_frame(None, max_age=1.0)
-                    if exact is None:
-                        exact = broadcast_frame(raw)
-                    yield b"--frame\r\nContent-Type: image/jpeg\r\nCache-Control: no-cache\r\n\r\n" + exact + b"\r\n"
-                else:
-                    time.sleep(0.05)
-                time.sleep(0.01)
 
-        return StreamingResponse(stream(), media_type="multipart/x-mixed-replace; boundary=frame")
+                raw = frame_getter()
+                if not raw:
+                    time.sleep(0.02)
+                    continue
+
+                exact = browser_renderer.get_frame(None, max_age=1.0)
+                if exact is None:
+                    exact = broadcast_frame(raw)
+
+                # Do not send the same composed image repeatedly.
+                if exact and exact != last_sent:
+                    last_sent = exact
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n"
+                        b"Cache-Control: no-cache\r\n\r\n"
+                        + exact
+                        + b"\r\n"
+                    )
+                else:
+                    # Give the camera and browser renderer time to publish
+                    # the next frame instead of busy-looping on stale images.
+                    time.sleep(0.01)
+
+        return StreamingResponse(
+            stream(),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+            headers={"Cache-Control": "no-cache, no-store"},
+        )
+
 
     # -------------------------------------------------------- OAuth
     def base_url(request):
