@@ -697,8 +697,6 @@ class Publisher:
                     self.q.not_full.notify_all()
             except Exception as exc:
                 log(f"Preview queue cleanup failed: {exc}")
-            except Exception:
-                pass
 
         try:
             self.q.put_nowait(msg)

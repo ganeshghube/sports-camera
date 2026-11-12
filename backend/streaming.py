@@ -622,7 +622,7 @@ def build_router(store, require_user, current_user, log, root: Path,
         delay = min(30, 2 ** min(attempt - 1, 4))
         log(f"{name.title()} stream disconnected unexpectedly; reconnecting in {delay}s (attempt {attempt}/8)")
         def worker():
-            if stream_desired.__contains__(name):
+            if name in stream_desired:
                 time.sleep(delay)
             if name not in stream_desired:
                 return
@@ -665,7 +665,7 @@ def build_router(store, require_user, current_user, log, root: Path,
         # a running camera so a configuration error can never trigger reconnects.
         # Validate destination before requiring a running camera so configuration
         # errors are reported clearly in the UI.
-        if name == "youtube" and not settings()["dest"].get("youtube", {}).get("stream_key") and kv_get("oauth_youtube"):
+        if name == "youtube" and not s["dest"].get("youtube", {}).get("stream_key") and kv_get("oauth_youtube"):
             _prepare_youtube_destination()
         url = dest_url(name)
         ensure_camera_ready()
@@ -678,7 +678,7 @@ def build_router(store, require_user, current_user, log, root: Path,
             if old and old.alive():
                 return old.info()
             if name == "youtube":
-                fps = max(30, min(60, int(s.get("youtube_fps", 60))))
+                fps = max(30, min(60, int(s.get("youtube_fps", 30))))
                 yres = str(s.get("youtube_resolution", "1080p"))
                 dims = {"720p": (1280, 720), "1080p": (1920, 1080),
                         "1440p": (2560, 1440), "2160p": (3840, 2160)}
@@ -719,7 +719,7 @@ def build_router(store, require_user, current_user, log, root: Path,
             cmd += [
                 "-b:v", f"{video_k}k",
                 "-maxrate", f"{video_k}k",
-                "-bufsize", f"{max(video_k * 2, video_k)}k",
+                "-bufsize", f"{video_k * 2}k",
                 "-g", str(fps * 2), "-keyint_min", str(fps),
                 "-sc_threshold", "0",
                 "-pix_fmt", "yuv420p",
