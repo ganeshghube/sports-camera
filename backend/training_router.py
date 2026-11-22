@@ -52,15 +52,37 @@ def _log(*msgs):
         _state["log"] = _state["log"][-600:]
 
 
-def build_router(auth_dep) -> APIRouter:
+def _capture_bytes(uploaded: bytes, frame_getter):
+    """Return a JPEG supplied by a client or by the shared live camera."""
+    body = uploaded or (frame_getter() if frame_getter else None)
+    if not body:
+        raise HTTPException(
+            409,
+            "Camera is not delivering live frames. Start Camera in Live Preview first.",
+        )
+    if not isinstance(body, bytes) or not body.startswith(b"\xff\xd8"):
+        raise HTTPException(400, "Camera did not provide a valid JPEG frame")
+    return body
+
+
+def build_router(auth_dep, frame_getter=None) -> APIRouter:
     router = APIRouter(prefix="/api/training")
 
     # ── capture ───────────────────────────────────────────────────────────────
     @router.post("/capture")
     async def capture(request: Request, _=auth_dep):
-        body = await request.body()
-        if not body:
-            raise HTTPException(400, "No image data")
+        """Save the latest shared camera frame for annotation.
+
+        The training UI deliberately asks the backend for the frame instead of
+        painting an MJPEG ``<img>`` into a browser canvas.  Canvas snapshots of
+        a live multipart image are unreliable on some Chromium builds, whereas
+        the tracker already owns an encoded JPEG for the live preview.  Raw
+        JPEG uploads remain supported for API clients and backwards
+        compatibility.
+        """
+        body = _capture_bytes(await request.body(), frame_getter)
+
+        IMAGES_DIR.mkdir(parents=True, exist_ok=True)
         name = f"frame_{int(time.time()*1000)}.jpg"
         (IMAGES_DIR / name).write_bytes(body)
         return {"name": name}

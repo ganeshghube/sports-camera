@@ -104,6 +104,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
 </head>
 <body>
 
+<div id="page">
+
 <!-- Step navigation -->
 <div class="steps">
   <div class="step active" data-step="1" onclick="gotoStep(1)">
@@ -363,6 +365,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
   </div>
 </div>
 
+</div>
+
 <script src="js/app.js"></script>
 <script>
 (async () => {
@@ -468,28 +472,16 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
 
   // ── Capture frame ──────────────────────────────────────────────────────────
   window.captureFrame = async () => {
-    const img = document.getElementById('liveFeed');
     const btn = document.getElementById('captureBtn');
     try {
       btn.disabled = true;
       btn.textContent = '⏳ Capturing…';
-      // Draw MJPEG frame to canvas
-      const c = document.createElement('canvas');
-      c.width  = img.naturalWidth  || 640;
-      c.height = img.naturalHeight || 360;
-      if (!c.width || !c.height) throw new Error('Camera not started — go to Live Preview first');
-      c.getContext('2d').drawImage(img, 0, 0);
+      // Take the frame from the already-running shared camera reader.  This
+      // avoids unreliable canvas snapshots of a live MJPEG <img>, and does
+      // not open a second connection to the camera.
+      const captured = await CL.api('/api/training/capture', { method: 'POST' });
 
-      const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
-      const ab   = await blob.arrayBuffer();
-
-      await fetch('/api/training/capture', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'image/jpeg' },
-        body: ab,
-      });
-
-      document.getElementById('feedStatus').textContent = '✅ Captured!';
+      document.getElementById('feedStatus').textContent = '✅ Captured ' + captured.name;
       setTimeout(() => document.getElementById('feedStatus').textContent = '', 1500);
       await loadFrames();
     } catch(e) {

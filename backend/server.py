@@ -676,7 +676,7 @@ try:
     from backend import training_router as _tr  # noqa: E402
 except ImportError:
     import training_router as _tr  # noqa: E402
-app.include_router(_tr.build_router(Depends(require_user)))  # Depends used as default arg inside router
+app.include_router(_tr.build_router(Depends(require_user), frame_getter=_frame_getter))
 import atexit  # noqa: E402
 atexit.register(stream_router.cleanup)   # never leave ffmpeg processes running
 
