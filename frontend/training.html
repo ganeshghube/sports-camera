@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Train Ball Tracker — Cricket Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1a3a5c;--navy2:#264a70;--red:#c41e3a;--green:#1a7a3c;--green2:#06d6a0;
+--gold:#d4920a;--bg:#eef1f5;--card:#fff;--border:#d1d9e0;--text:#1a2535;--text2:#4a5568;--muted:#8090a0;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-size:13px;min-height:100vh;}
+
+/* STEPS NAV */
+.steps{display:flex;background:#fff;border-bottom:2px solid var(--border);overflow-x:auto;}
+.step{flex:1;min-width:120px;padding:14px 10px 12px;text-align:center;cursor:pointer;border-bottom:3px solid transparent;
+  font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--muted);transition:.15s;user-select:none;}
+.step:hover{background:#f8fafc;color:var(--text);}
+.step.active{color:var(--navy);border-bottom-color:var(--navy);background:#f0f4f8;}
+.step .num{display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--border);
+  color:var(--text2);font-size:11px;line-height:22px;margin-right:6px;}
+.step.active .num{background:var(--navy);color:#fff;}
+.step.done .num{background:var(--green2);color:#fff;}
+.step.done{color:var(--green);}
+
+/* PANELS */
+.panel{display:none;padding:14px;max-width:1100px;margin:auto;}
+.panel.active{display:block;}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:700px){.grid2{grid-template-columns:1fr;}}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.card-hd{background:var(--navy);color:#fff;padding:8px 14px;border-radius:8px 8px 0 0;
+  font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:space-between;}
+.card-bd{padding:14px;}
+
+/* BUTTONS */
+.btn{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:#fff;
+  font-size:12px;font-weight:600;cursor:pointer;transition:.12s;color:var(--text);}
+.btn:hover{background:#f0f4f8;}
+.btn.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+.btn.primary:hover{background:var(--navy2);}
+.btn.green{background:var(--green);color:#fff;border-color:var(--green);}
+.btn.green:hover{opacity:.88;}
+.btn.red{background:var(--red);color:#fff;border-color:var(--red);}
+.btn.red:hover{opacity:.88;}
+.btn.lg{padding:10px 20px;font-size:13px;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;
+  letter-spacing:1px;text-transform:uppercase;}
+.badge.ok{background:#d1fae5;color:#065f46;}
+.badge.warn{background:#fef3c7;color:#92400e;}
+.badge.bad{background:#fee2e2;color:#991b1b;}
+.badge.info{background:#dbeafe;color:#1e40af;}
+
+.hint{color:var(--muted);font-size:11px;}
+.big{font-size:22px;font-weight:800;font-family:'Barlow Condensed',sans-serif;}
+
+/* CAMERA FEED */
+#liveFeed{width:100%;max-height:400px;object-fit:contain;background:#0b0f16;border-radius:6px;display:block;}
+.feed-wrap{position:relative;background:#0b0f16;border-radius:6px;overflow:hidden;}
+.feed-overlay{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+  display:flex;gap:8px;align-items:center;}
+
+/* FRAME GRID */
+.frame-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:10px;}
+.thumb{position:relative;border-radius:6px;overflow:hidden;border:2px solid var(--border);cursor:pointer;transition:.12s;}
+.thumb:hover{border-color:var(--navy);}
+.thumb.labeled{border-color:var(--green2);}
+.thumb.no-ball{border-color:var(--gold);}
+.thumb.selected{border-color:var(--navy);box-shadow:0 0 0 3px rgba(26,58,92,.25);}
+.thumb img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;}
+.thumb .tb{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);
+  font-size:9px;font-weight:700;color:#fff;padding:2px 5px;text-transform:uppercase;letter-spacing:.5px;}
+.thumb .del{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;
+  background:rgba(196,30,58,.9);color:#fff;border:none;cursor:pointer;font-size:10px;
+  display:none;align-items:center;justify-content:center;}
+.thumb:hover .del{display:flex;}
+
+/* ANNOTATION CANVAS */
+#annoWrap{position:relative;display:inline-block;max-width:100%;cursor:crosshair;}
+#annoCanvas{display:block;max-width:100%;border-radius:6px;}
+#annoImg{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;pointer-events:none;}
+
+/* PROGRESS */
+.prog-bar{height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden;margin:6px 0;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--navy),#4a90d9);transition:width .4s;border-radius:5px;}
+
+/* TRAIN LOG */
+#trainLog{background:#0b0f16;color:#a8e6cf;font-family:monospace;font-size:11px;
+  padding:12px;border-radius:6px;height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.5;}
+
+/* STAT ROW */
+.stat-row{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0;}
+.stat-box{background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:10px 16px;text-align:center;}
+.stat-box .val{font-size:28px;font-weight:900;font-family:'Barlow Condensed',sans-serif;color:var(--navy);}
+.stat-box .lbl{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:2px;}
+</style>
+</head>
+<body>
+
+<!-- Step navigation -->
+<div class="steps">
+  <div class="step active" data-step="1" onclick="gotoStep(1)">
+    <span class="num">1</span>Capture Frames
+  </div>
+  <div class="step" data-step="2" onclick="gotoStep(2)">
+    <span class="num">2</span>Label the Ball
+  </div>
+  <div class="step" data-step="3" onclick="gotoStep(3)">
+    <span class="num">3</span>Train Model
+  </div>
+  <div class="step" data-step="4" onclick="gotoStep(4)">
+    <span class="num">4</span>Deploy
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ STEP 1: CAPTURE -->
+<div class="panel active" id="step1">
+  <div style="margin-bottom:10px" class="row">
+    <div>
+      <div style="font-size:18px;font-weight:800">📷 Step 1 — Capture Frames</div>
+      <div class="hint" style="margin-top:3px">Point at a cricket ball and capture frames. Aim for 50–200 frames with the ball visible in different positions.</div>
+    </div>
+    <div style="margin-left:auto" class="row">
+      <span class="badge info" id="captureCount">0 frames</span>
+      <button class="btn primary lg" id="captureBtn" onclick="captureFrame()">📸 Capture Frame</button>
+      <button class="btn lg" onclick="gotoStep(2)">Next: Label →</button>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-hd">Live Camera Feed</div>
+      <div class="card-bd" style="padding:0">
+        <div class="feed-wrap">
+          <img id="liveFeed" src="/api/internal/raw-camera.mjpeg" alt="Camera feed"
+               onerror="this.src='';this.style.minHeight='200px'">
+          <div class="feed-overlay">
+            <span class="badge" id="feedStatus" style="background:rgba(0,0,0,.6);color:#fff">Loading…</span>
+          </div>
+        </div>
+        <div style="padding:10px" class="row">
+          <span class="hint">Camera must be started in <a href="preview.html" style="color:var(--navy)">Live Preview</a> first</span>
+          <button class="btn" onclick="document.getElementById('liveFeed').src='/api/internal/raw-camera.mjpeg?t='+Date.now()">↺ Refresh</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">Recent Captures <span id="recentCount" style="font-size:10px;opacity:.7"></span></div>
+      <div class="card-bd">
+        <div id="recentGrid" class="frame-grid" style="max-height:340px;overflow-y:auto"></div>
+        <div id="recentEmpty" class="hint" style="padding:20px 0;text-align:center">
+          No frames captured yet.<br>Start your camera and click Capture Frame.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tips -->
+  <div class="card" style="margin-top:12px">
+    <div class="card-hd">💡 Tips for Best Results</div>
+    <div class="card-bd">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
+        <div><b>🎯 Variety</b><br><span class="hint">Capture ball in different positions — left, centre, right, close, far</span></div>
+        <div><b>💡 Lighting</b><br><span class="hint">Include frames from different lighting conditions (morning, afternoon, indoor)</span></div>
+        <div><b>❌ No ball</b><br><span class="hint">Capture 10–20 frames WITHOUT the ball — helps reduce false detections</span></div>
+        <div><b>📊 Target</b><br><span class="hint">50+ frames with ball is enough to improve accuracy. 200+ is ideal.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ STEP 2: LABEL -->
+<div class="panel" id="step2">
+  <div class="row" style="margin-bottom:10px">
+    <div>
+      <div style="font-size:18px;font-weight:800">🏷️ Step 2 — Label the Ball</div>
+      <div class="hint" style="margin-top:3px">Draw a box around the ball in each frame. Click and drag on the image.</div>
+    </div>
+    <div style="margin-left:auto" class="row">
+      <span class="badge ok" id="labelProgress">0 labeled</span>
+      <button class="btn" onclick="gotoStep(1)">← Back</button>
+      <button class="btn primary lg" onclick="gotoStep(3)">Next: Train →</button>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <!-- Annotation tool -->
+    <div class="card">
+      <div class="card-hd">
+        <span id="annoTitle">Select a frame →</span>
+        <div class="row" style="gap:6px">
+          <button class="btn" id="undoBtn" onclick="clearBox()" title="Clear box">✕ Clear</button>
+          <button class="btn green" id="saveWithBall" onclick="saveLabel(true)" disabled>✅ Ball here</button>
+          <button class="btn" id="saveNoBall" onclick="saveLabel(false)" disabled>⊘ No ball</button>
+        </div>
+      </div>
+      <div class="card-bd" style="padding:10px;text-align:center">
+        <div id="annoWrap">
+          <canvas id="annoCanvas" width="640" height="360"></canvas>
+        </div>
+        <div class="hint" style="margin-top:8px" id="annoHint">Select a frame from the list to annotate</div>
+
+        <!-- Nav buttons -->
+        <div class="row" style="justify-content:center;margin-top:10px;gap:8px">
+          <button class="btn" id="prevBtn" onclick="navFrame(-1)">← Prev</button>
+          <span id="framePos" class="hint">— / —</span>
+          <button class="btn" id="nextBtn" onclick="navFrame(1)">Next →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Frame list -->
+    <div class="card">
+      <div class="card-hd">All Frames</div>
+      <div class="card-bd" style="padding:8px">
+        <div class="row" style="margin-bottom:8px;gap:6px">
+          <button class="btn" onclick="filterFrames('all')" id="fAll">All</button>
+          <button class="btn" onclick="filterFrames('pending')" id="fPend">⬜ Pending</button>
+          <button class="btn" onclick="filterFrames('labeled')" id="fLabeled">🟢 Labeled</button>
+          <button class="btn" onclick="filterFrames('no_ball')" id="fNoBall">🟡 No Ball</button>
+        </div>
+        <div id="labelGrid" class="frame-grid" style="max-height:420px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ STEP 3: TRAIN -->
+<div class="panel" id="step3">
+  <div class="row" style="margin-bottom:10px">
+    <div>
+      <div style="font-size:18px;font-weight:800">🧠 Step 3 — Train the Model</div>
+      <div class="hint" style="margin-top:3px">Fine-tune the existing model on your labelled frames. Runs in the background.</div>
+    </div>
+    <div style="margin-left:auto" class="row">
+      <button class="btn" onclick="gotoStep(2)">← Back</button>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-hd">Dataset Summary</div>
+      <div class="card-bd">
+        <div class="stat-row">
+          <div class="stat-box"><div class="val" id="tTotal">—</div><div class="lbl">Total Frames</div></div>
+          <div class="stat-box"><div class="val" id="tLabeled" style="color:var(--green)">—</div><div class="lbl">With Ball</div></div>
+          <div class="stat-box"><div class="val" id="tNoBall" style="color:var(--gold)">—</div><div class="lbl">No Ball</div></div>
+          <div class="stat-box"><div class="val" id="tPending" style="color:var(--red)">—</div><div class="lbl">Unlabeled</div></div>
+        </div>
+        <div id="trainReadiness" style="margin:10px 0"></div>
+
+        <div style="margin-top:16px">
+          <label style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-weight:600;min-width:80px">Epochs:</span>
+            <input type="range" id="epochSlider" min="10" max="100" value="30"
+              oninput="document.getElementById('epochVal').textContent=this.value" style="flex:1">
+            <span id="epochVal" style="min-width:30px;font-weight:700">30</span>
+          </label>
+          <div class="hint" style="margin-bottom:12px">More epochs = more accurate but slower. 30 is good for first run.</div>
+
+          <div class="row">
+            <button class="btn primary lg" id="startTrainBtn" onclick="startTraining()">🚀 Start Training</button>
+            <button class="btn red" id="stopTrainBtn" onclick="stopTraining()" style="display:none">⏹ Stop</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        Training Progress
+        <span class="badge" id="trainStatusBadge">IDLE</span>
+      </div>
+      <div class="card-bd">
+        <div class="row" style="margin-bottom:6px">
+          <span id="trainPhase" class="hint">Not started</span>
+          <span id="trainMetrics" style="margin-left:auto;font-weight:600;color:var(--green)"></span>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+        <div id="trainLog" style="margin-top:8px">Waiting to start…</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="trainDoneCard" class="card" style="margin-top:12px;display:none;border-color:var(--green2)">
+    <div class="card-hd" style="background:var(--green)">✅ Training Complete!</div>
+    <div class="card-bd row">
+      <div>
+        <div style="font-size:16px;font-weight:700">New model is ready.</div>
+        <div class="hint" id="doneMetrics" style="margin-top:4px"></div>
+      </div>
+      <button class="btn primary lg" style="margin-left:auto" onclick="gotoStep(4)">Deploy Model →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ STEP 4: DEPLOY -->
+<div class="panel" id="step4">
+  <div class="row" style="margin-bottom:10px">
+    <div>
+      <div style="font-size:18px;font-weight:800">🚀 Step 4 — Deploy the Model</div>
+      <div class="hint" style="margin-top:3px">Export to OpenVINO and activate. The old model is backed up automatically.</div>
+    </div>
+    <div style="margin-left:auto">
+      <button class="btn" onclick="gotoStep(3)">← Back</button>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-hd">Model Status</div>
+      <div class="card-bd">
+        <div class="stat-row">
+          <div class="stat-box">
+            <div class="val" id="newMap" style="color:var(--green)">—</div>
+            <div class="lbl">New mAP50</div>
+          </div>
+          <div class="stat-box">
+            <div class="val">?</div>
+            <div class="lbl">Old mAP50</div>
+          </div>
+        </div>
+        <div style="margin:14px 0">
+          <div style="font-weight:600;margin-bottom:6px">What deploy does:</div>
+          <div style="display:grid;gap:5px">
+            <div>✅ Backs up old <code>models/best.pt</code></div>
+            <div>✅ Exports new model → OpenVINO format</div>
+            <div>✅ Copies to <code>models/</code></div>
+            <div>✅ Restart tracker to use it</div>
+          </div>
+        </div>
+        <button class="btn primary lg" id="deployBtn" onclick="deployModel()">🚀 Deploy New Model</button>
+        <div id="deployStatus" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">Deploy Log</div>
+      <div class="card-bd" style="padding:0">
+        <div id="deployLog" style="background:#0b0f16;color:#a8e6cf;font-family:monospace;font-size:11px;
+          padding:12px;border-radius:0 0 8px 8px;height:260px;overflow-y:auto;white-space:pre-wrap">Waiting…</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="deployDoneCard" class="card" style="margin-top:12px;display:none;border-color:var(--green2)">
+    <div class="card-hd" style="background:var(--green)">🎉 Model Deployed!</div>
+    <div class="card-bd row">
+      <div>New model is live. Restart the AI tracker to use it.</div>
+      <div class="row" style="margin-left:auto;gap:8px">
+        <a class="btn" href="preview.html">Go to Preview</a>
+        <button class="btn primary" onclick="restartTracker()">↺ Restart Tracker</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+(async () => {
+  await CL.shell('training.html', '🎯 Train Ball Tracker');
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let allFrames   = [];
+  let filteredFrames = [];
+  let currentFrame = null;
+  let currentFilter = 'all';
+  let isDrawing   = false;
+  let startX = 0, startY = 0;
+  let currentBox  = null;    // {x,y,w,h} in canvas pixels
+  let trainPollTimer = null;
+
+  const canvas = document.getElementById('annoCanvas');
+  const ctx    = canvas.getContext('2d');
+  let annoImg  = new Image();
+  let imgW = 640, imgH = 360;
+
+  // ── Step navigation ────────────────────────────────────────────────────────
+  window.gotoStep = (n) => {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById('step' + n).classList.add('active');
+    document.querySelector(`.step[data-step="${n}"]`).classList.add('active');
+    if (n === 2 || n === 3) loadFrames();
+    if (n === 3) refreshTrainStatus();
+    if (n === 4) {
+      refreshTrainStatus();
+      const m = document.getElementById('newMap');
+      // show latest metrics
+    }
+  };
+
+  // ── Load frames from API ───────────────────────────────────────────────────
+  async function loadFrames() {
+    try {
+      const r = await CL.api('/api/training/frames');
+      allFrames = r.frames || [];
+      renderCaptureGrid();
+      renderLabelGrid();
+      renderTrainStats(r);
+      document.getElementById('captureCount').textContent = r.total + ' frames';
+      document.getElementById('labelProgress').textContent =
+        r.labeled + ' labeled, ' + r.no_ball + ' no-ball';
+    } catch(e) { CL.toast(e.message, true); }
+  }
+
+  // ── Render capture recent grid ─────────────────────────────────────────────
+  function renderCaptureGrid() {
+    const grid = document.getElementById('recentGrid');
+    const empty = document.getElementById('recentEmpty');
+    const recent = [...allFrames].reverse().slice(0, 20);
+    empty.style.display = recent.length ? 'none' : '';
+    grid.innerHTML = recent.map(f => thumbHTML(f)).join('');
+    addThumbEvents(grid);
+  }
+
+  // ── Render label grid ──────────────────────────────────────────────────────
+  function renderLabelGrid() {
+    filteredFrames = allFrames.filter(f => {
+      if (currentFilter === 'pending') return f.pending;
+      if (currentFilter === 'labeled') return f.labeled;
+      if (currentFilter === 'no_ball') return f.no_ball;
+      return true;
+    });
+    const grid = document.getElementById('labelGrid');
+    grid.innerHTML = filteredFrames.map((f,i) =>
+      `<div class="thumb ${f.labeled?'labeled':f.no_ball?'no-ball':''} ${currentFrame===f.name?'selected':''}"
+        data-name="${f.name}" data-idx="${i}" onclick="selectFrame('${f.name}',${i})">
+        <img src="/api/training/frames/${f.name}/image" loading="lazy">
+        <div class="tb">${f.labeled?'✅ Ball':f.no_ball?'⊘ No Ball':'⬜ Pending'}</div>
+        <button class="del" onclick="deleteFrame(event,'${f.name}')">✕</button>
+      </div>`
+    ).join('');
+    // Update label progress
+    document.getElementById('labelProgress').textContent =
+      allFrames.filter(f=>f.labeled).length + ' labeled, ' +
+      allFrames.filter(f=>f.no_ball).length + ' no-ball';
+  }
+
+  function thumbHTML(f) {
+    return `<div class="thumb ${f.labeled?'labeled':f.no_ball?'no-ball':''}"
+      data-name="${f.name}" onclick="selectFrame('${f.name}')">
+      <img src="/api/training/frames/${f.name}/image" loading="lazy">
+      <div class="tb">${f.labeled?'✅':f.no_ball?'⊘':'⬜'}</div>
+      <button class="del" onclick="deleteFrame(event,'${f.name}')">✕</button>
+    </div>`;
+  }
+
+  function addThumbEvents(container) {}
+
+  window.filterFrames = (f) => {
+    currentFilter = f;
+    ['All','Pend','Labeled','NoBall'].forEach(id => {
+      document.getElementById('f'+id)?.classList.remove('primary');
+    });
+    document.getElementById('f' + f.charAt(0).toUpperCase() + f.slice(1).replace('_ball','NoBall'))?.classList.add('primary');
+    document.getElementById('fAll').classList[f==='all'?'add':'remove']('primary');
+    renderLabelGrid();
+  };
+
+  // ── Capture frame ──────────────────────────────────────────────────────────
+  window.captureFrame = async () => {
+    const img = document.getElementById('liveFeed');
+    const btn = document.getElementById('captureBtn');
+    try {
+      btn.disabled = true;
+      btn.textContent = '⏳ Capturing…';
+      // Draw MJPEG frame to canvas
+      const c = document.createElement('canvas');
+      c.width  = img.naturalWidth  || 640;
+      c.height = img.naturalHeight || 360;
+      if (!c.width || !c.height) throw new Error('Camera not started — go to Live Preview first');
+      c.getContext('2d').drawImage(img, 0, 0);
+
+      const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
+      const ab   = await blob.arrayBuffer();
+
+      await fetch('/api/training/capture', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: ab,
+      });
+
+      document.getElementById('feedStatus').textContent = '✅ Captured!';
+      setTimeout(() => document.getElementById('feedStatus').textContent = '', 1500);
+      await loadFrames();
+    } catch(e) {
+      CL.toast(e.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '📸 Capture Frame';
+    }
+  };
+
+  // ── Select frame for annotation ────────────────────────────────────────────
+  window.selectFrame = async (name, idx) => {
+    currentFrame = name;
+    document.querySelectorAll('.thumb').forEach(t =>
+      t.classList.toggle('selected', t.dataset.name === name));
+    document.getElementById('annoTitle').textContent = name;
+    document.getElementById('saveWithBall').disabled = false;
+    document.getElementById('saveNoBall').disabled   = false;
+
+    // Find index in filteredFrames for nav
+    if (idx === undefined) idx = filteredFrames.findIndex(f => f.name === name);
+    updateNavButtons(idx);
+
+    // Load image
+    annoImg = new Image();
+    annoImg.crossOrigin = 'anonymous';
+    annoImg.src = '/api/training/frames/' + name + '/image';
+    annoImg.onload = async () => {
+      imgW = annoImg.naturalWidth;
+      imgH = annoImg.naturalHeight;
+      canvas.width  = annoImg.naturalWidth;
+      canvas.height = annoImg.naturalHeight;
+      currentBox = null;
+
+      // Load existing label
+      try {
+        const lbl = await CL.api('/api/training/frames/' + name + '/label');
+        if (lbl.boxes && lbl.boxes.length > 0) {
+          const b = lbl.boxes[0];
+          // Convert normalised YOLO → pixel rect
+          const px = (b.cx - b.w/2) * imgW;
+          const py = (b.cy - b.h/2) * imgH;
+          currentBox = { x: px, y: py, w: b.w * imgW, h: b.h * imgH };
+        }
+      } catch(e) {}
+
+      redraw();
+      document.getElementById('annoHint').textContent = 'Draw a box around the cricket ball (click & drag)';
+    };
+  };
+
+  function updateNavButtons(idx) {
+    document.getElementById('framePos').textContent = (idx+1) + ' / ' + filteredFrames.length;
+    document.getElementById('prevBtn').disabled = idx <= 0;
+    document.getElementById('nextBtn').disabled = idx >= filteredFrames.length - 1;
+  }
+
+  window.navFrame = (dir) => {
+    const idx = filteredFrames.findIndex(f => f.name === currentFrame);
+    const nxt = idx + dir;
+    if (nxt >= 0 && nxt < filteredFrames.length) selectFrame(filteredFrames[nxt].name, nxt);
+  };
+
+  // ── Canvas draw ────────────────────────────────────────────────────────────
+  function redraw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(annoImg, 0, 0);
+    if (currentBox) {
+      ctx.strokeStyle = '#06d6a0';
+      ctx.lineWidth   = Math.max(2, canvas.width * 0.003);
+      ctx.strokeRect(currentBox.x, currentBox.y, currentBox.w, currentBox.h);
+      ctx.fillStyle = 'rgba(6,214,160,0.08)';
+      ctx.fillRect(currentBox.x, currentBox.y, currentBox.w, currentBox.h);
+      // Label
+      ctx.fillStyle = '#06d6a0';
+      ctx.font = `bold ${Math.max(12, canvas.width * 0.018)}px Inter`;
+      ctx.fillText('Cricket Ball', currentBox.x + 4, currentBox.y - 6);
+    }
+  }
+
+  function canvasXY(e) {
+    const r  = canvas.getBoundingClientRect();
+    const sx = canvas.width  / r.width;
+    const sy = canvas.height / r.height;
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    return [(cx - r.left) * sx, (cy - r.top) * sy];
+  }
+
+  canvas.addEventListener('mousedown',  e => { if (!currentFrame) return; isDrawing=true; [startX,startY]=canvasXY(e); currentBox=null; });
+  canvas.addEventListener('mousemove',  e => {
+    if (!isDrawing) return;
+    const [x,y] = canvasXY(e);
+    currentBox = { x: Math.min(startX,x), y: Math.min(startY,y),
+                   w: Math.abs(x-startX),  h: Math.abs(y-startY) };
+    redraw();
+  });
+  canvas.addEventListener('mouseup',   () => { isDrawing = false; });
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); if (!currentFrame) return; isDrawing=true; [startX,startY]=canvasXY(e); currentBox=null; }, {passive:false});
+  canvas.addEventListener('touchmove',  e => { e.preventDefault(); if (!isDrawing) return; const [x,y]=canvasXY(e); currentBox={x:Math.min(startX,x),y:Math.min(startY,y),w:Math.abs(x-startX),h:Math.abs(y-startY)}; redraw(); }, {passive:false});
+  canvas.addEventListener('touchend',  () => { isDrawing = false; });
+
+  window.clearBox = () => { currentBox = null; redraw(); };
+
+  // ── Save label ─────────────────────────────────────────────────────────────
+  window.saveLabel = async (hasBall) => {
+    if (!currentFrame) return;
+    try {
+      let boxes = [];
+      if (hasBall && currentBox && currentBox.w > 5 && currentBox.h > 5) {
+        boxes = [{
+          cx: (currentBox.x + currentBox.w/2) / imgW,
+          cy: (currentBox.y + currentBox.h/2) / imgH,
+          w:  currentBox.w / imgW,
+          h:  currentBox.h / imgH,
+        }];
+      } else if (hasBall && (!currentBox || currentBox.w < 5)) {
+        CL.toast('Draw a box around the ball first', true);
+        return;
+      }
+
+      await CL.api('/api/training/frames/' + currentFrame + '/label', {
+        method: 'POST', body: { boxes }
+      });
+
+      // Auto-advance to next pending
+      await loadFrames();
+      const idx = filteredFrames.findIndex(f => f.name === currentFrame);
+      const next = filteredFrames.slice(idx+1).find(f => f.pending);
+      if (next) selectFrame(next.name, filteredFrames.indexOf(next));
+      else CL.toast('✅ Saved! ' + (hasBall ? 'Ball labeled.' : 'Marked as no-ball.'));
+    } catch(e) { CL.toast(e.message, true); }
+  };
+
+  // ── Delete frame ───────────────────────────────────────────────────────────
+  window.deleteFrame = async (e, name) => {
+    e.stopPropagation();
+    if (!confirm('Delete this frame?')) return;
+    try {
+      await CL.api('/api/training/frames/' + name, { method: 'DELETE' });
+      if (currentFrame === name) { currentFrame = null; ctx.clearRect(0,0,canvas.width,canvas.height); }
+      await loadFrames();
+    } catch(e2) { CL.toast(e2.message, true); }
+  };
+
+  // ── Render train stats ─────────────────────────────────────────────────────
+  function renderTrainStats(r) {
+    document.getElementById('tTotal').textContent   = r.total;
+    document.getElementById('tLabeled').textContent = r.labeled;
+    document.getElementById('tNoBall').textContent  = r.no_ball;
+    document.getElementById('tPending').textContent = r.pending;
+
+    const ready = document.getElementById('trainReadiness');
+    if (r.labeled >= 20) {
+      ready.innerHTML = '<span class="badge ok" style="font-size:12px;padding:4px 12px">✅ Ready to train (' + r.labeled + ' frames with ball)</span>';
+      document.getElementById('startTrainBtn').disabled = false;
+    } else if (r.labeled >= 5) {
+      ready.innerHTML = '<span class="badge warn" style="font-size:12px;padding:4px 12px">⚠️ Minimum met (' + r.labeled + '/20 recommended). Can train but more data = better results.</span>';
+      document.getElementById('startTrainBtn').disabled = false;
+    } else {
+      ready.innerHTML = '<span class="badge bad" style="font-size:12px;padding:4px 12px">❌ Need at least 5 labeled frames with ball (have ' + r.labeled + ')</span>';
+      document.getElementById('startTrainBtn').disabled = true;
+    }
+  }
+
+  // ── Start training ─────────────────────────────────────────────────────────
+  window.startTraining = async () => {
+    const epochs = parseInt(document.getElementById('epochSlider').value);
+    try {
+      await CL.api('/api/training/run', { method: 'POST', body: { epochs, batch: 8 } });
+      document.getElementById('startTrainBtn').style.display = 'none';
+      document.getElementById('stopTrainBtn').style.display  = '';
+      document.getElementById('trainDoneCard').style.display = 'none';
+      startTrainPoll();
+    } catch(e) { CL.toast(e.message, true); }
+  };
+
+  window.stopTraining = async () => {
+    try {
+      await CL.api('/api/training/stop', { method: 'POST' });
+      document.getElementById('startTrainBtn').style.display = '';
+      document.getElementById('stopTrainBtn').style.display  = 'none';
+    } catch(e) {}
+  };
+
+  function startTrainPoll() {
+    clearInterval(trainPollTimer);
+    trainPollTimer = setInterval(refreshTrainStatus, 1500);
+  }
+
+  async function refreshTrainStatus() {
+    try {
+      const s = await CL.api('/api/training/status');
+      const badge = document.getElementById('trainStatusBadge');
+      const cls   = { idle:'', running:'info', done:'ok', error:'bad' };
+      badge.textContent = s.status.toUpperCase();
+      badge.className   = 'badge ' + (cls[s.status] || '');
+
+      document.getElementById('trainPhase').textContent = s.phase || '';
+      document.getElementById('progFill').style.width   = s.progress + '%';
+
+      if (s.metrics && s.metrics.mAP50) {
+        document.getElementById('trainMetrics').textContent =
+          'mAP50: ' + (s.metrics.mAP50 * 100).toFixed(1) + '%';
+      }
+
+      // Log
+      const log = document.getElementById('trainLog');
+      if (s.log && s.log.length) {
+        log.textContent = s.log.join('\n');
+        log.scrollTop   = log.scrollHeight;
+      }
+
+      if (s.status === 'done') {
+        clearInterval(trainPollTimer);
+        document.getElementById('startTrainBtn').style.display = '';
+        document.getElementById('stopTrainBtn').style.display  = 'none';
+        document.getElementById('trainDoneCard').style.display = '';
+        const m = s.metrics;
+        document.getElementById('doneMetrics').textContent = m && m.mAP50
+          ? `mAP50 = ${(m.mAP50*100).toFixed(1)}%  |  mAP50-95 = ${(m.mAP50_95*100).toFixed(1)}%`
+          : 'Model saved. Click Deploy to activate.';
+        // Set deploy metrics
+        document.getElementById('newMap').textContent = m?.mAP50
+          ? (m.mAP50*100).toFixed(1) + '%' : '—';
+      } else if (s.status === 'error') {
+        clearInterval(trainPollTimer);
+        document.getElementById('startTrainBtn').style.display = '';
+        document.getElementById('stopTrainBtn').style.display  = 'none';
+        CL.toast('Training failed — check log', true);
+      }
+    } catch(e) {}
+  }
+
+  // ── Deploy ─────────────────────────────────────────────────────────────────
+  window.deployModel = async () => {
+    const btn = document.getElementById('deployBtn');
+    const log = document.getElementById('deployLog');
+    btn.disabled = true;
+    btn.textContent = '⏳ Deploying…';
+    log.textContent = 'Starting export…\n';
+    try {
+      const r = await CL.api('/api/training/deploy', { method: 'POST' });
+      log.textContent += (r.log || '') + '\n✅ Done!';
+      log.scrollTop = log.scrollHeight;
+      document.getElementById('deployDoneCard').style.display = '';
+      document.getElementById('deployStatus').innerHTML =
+        '<span class="badge ok">Deployed ✅</span>';
+    } catch(e) {
+      log.textContent += '\n❌ ' + e.message;
+      CL.toast(e.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🚀 Deploy New Model';
+    }
+  };
+
+  window.restartTracker = async () => {
+    try {
+      await CL.api('/api/tracker/stop', { method: 'POST' });
+      setTimeout(() => CL.toast('Tracker restarted — go to Preview to start tracking'), 1000);
+    } catch(e) {}
+  };
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  await loadFrames();
+
+  // Check if training is already running
+  refreshTrainStatus().then(() => {
+    if (document.getElementById('trainStatusBadge').textContent === 'RUNNING') {
+      startTrainPoll();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

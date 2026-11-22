@@ -671,6 +671,12 @@ except ImportError:  # started as `python backend/server.py`
 
 stream_router = streaming.build_router(store, require_user, current_user, log, ROOT, camera_status_getter=_camera_status, camera_control=_send_tracker_command, frame_getter=_frame_getter, camera_discover=_discover_cameras)
 app.include_router(stream_router)
+
+try:
+    from backend import training_router as _tr  # noqa: E402
+except ImportError:
+    import training_router as _tr  # noqa: E402
+app.include_router(_tr.build_router(Depends(require_user)))  # Depends used as default arg inside router
 import atexit  # noqa: E402
 atexit.register(stream_router.cleanup)   # never leave ffmpeg processes running
 
