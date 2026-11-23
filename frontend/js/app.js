@@ -85,7 +85,7 @@
   };
 
   /** Realtime ball-tracking socket with auto-reconnect. */
-  CL.tracker = function ({ onStatus, onDetection, onFrame, onError, onState }) {
+  CL.tracker = function ({ onStatus, onDetection, onZoom, onFrame, onError, onState }) {
     let ws, retry = 500, closed = false;
     const api = { send: (cmd) => ws && ws.readyState === 1 && ws.send(JSON.stringify({ command: cmd })), close() { closed = true; ws && ws.close(); } };
     (function open() {
@@ -97,6 +97,7 @@
         const m = JSON.parse(ev.data);
         if (m.type === "status") onStatus && onStatus(m);
         else if (m.type === "ball_detection") onDetection && onDetection(m);
+        else if (m.type === "zoom") onZoom && onZoom(m);
         else if (m.type === "error") onError && onError(m.error);
       };
       ws.onclose = () => { onState && onState(false); if (!closed) { setTimeout(open, retry); retry = Math.min(retry * 2, 5000); } };

@@ -7,34 +7,40 @@
 <link rel="stylesheet" href="css/app.css">
 <style>
 .preview-stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;min-height:300px;box-shadow:0 12px 30px rgba(0,0,0,.2)}
-.preview-stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
-.preview-stage canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.preview-viewport{position:absolute;inset:0;width:100%;height:100%;transform-origin:50% 50%;will-change:transform}
+.preview-viewport img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.preview-viewport canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .preview-stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none;background:transparent}
 .preview-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#aab7c4;font-size:18px;font-weight:700}
 .preview-hud{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;z-index:5;pointer-events:none}
 .hud-pill{background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.15);color:#fff;padding:7px 11px;border-radius:999px;font:700 12px Inter;backdrop-filter:blur(6px)}
-.hud-pill.live{background:#b91c1c}.hud-pill.good{background:#166534}.hud-pill.warn{background:#92400e}
-.control-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.big-control{min-height:54px;font-size:17px;font-weight:800}
+.hud-pill.live{background:#b91c1c}.hud-pill.good{background:#166534}.hud-pill.warn{background:#92400e}.hud-pill.zoom{background:#0369a1}
+.control-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.big-control{min-height:54px;font-size:16px;font-weight:800}
 .big-control.running{background:#c41e3a!important;border-color:#c41e3a!important;color:#fff!important}
 .big-control.paused{background:#d97706!important;border-color:#d97706!important;color:#fff!important}
+.big-control.zoom-active{background:#0284c7!important;border-color:#0284c7!important;color:#fff!important;box-shadow:0 0 16px rgba(2,132,199,.5)}
 .status-card{display:grid;gap:8px}.status-line{display:flex;justify-content:space-between;gap:12px;align-items:center;font-weight:700}.status-line span:first-child{color:var(--muted);font-size:12px}
-@media(max-width:1000px){.control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:600px){.control-grid{grid-template-columns:1fr}.preview-hud{left:7px;top:7px}.hud-pill{padding:6px 9px;font-size:11px}}
+@media(max-width:1100px){.control-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:500px){.control-grid{grid-template-columns:1fr}.preview-hud{left:7px;top:7px}.hud-pill{padding:6px 9px;font-size:11px}}
 </style>
 </head>
 <body>
 <div id="page">
 <section class="cl-card">
- <div class="hd">Live Preview <span class="hint" style="margin-left:auto">ONE CAMERA • TRACK • RECORD • STREAM</span></div>
+ <div class="hd">Live Preview <span class="hint" style="margin-left:auto">ONE CAMERA • TRACK • ZOOM • RECORD • STREAM</span></div>
  <div class="bd">
   <div class="preview-stage" id="stage">
-   <img id="cameraFrame" alt="Live camera preview">
-   <canvas id="trackCanvas"></canvas>
+   <div class="preview-viewport" id="previewViewport">
+    <img id="cameraFrame" alt="Live camera preview">
+    <canvas id="trackCanvas"></canvas>
+   </div>
    <iframe id="scoreOverlay" src="index.html?overlay=1" title="Score overlay"></iframe>
    <div class="preview-hud">
     <span class="hud-pill" id="camHud">CAMERA: STOPPED</span>
     <span class="hud-pill" id="trackHud">TRACKING: OFF</span>
+    <span class="hud-pill" id="zoomHud">ZOOM: 1.0x</span>
     <span class="hud-pill" id="ballHud">BALL: —</span>
     <span class="hud-pill" id="streamHud">YOUTUBE: OFF</span>
    </div>
@@ -44,6 +50,7 @@
   <div class="control-grid" style="margin-top:12px">
    <button class="btn primary big-control" id="cameraBtn">▶ Start Camera</button>
    <button class="btn big-control" id="trackingBtn" disabled>🎯 Start Tracking</button>
+   <button class="btn big-control" id="autoZoomBtn">🔍 Auto Zoom: OFF</button>
    <button class="btn primary big-control" id="recordBtn">⏺ Start Recording</button>
    <button class="btn primary big-control" id="youtubeBtn">▶ Start YouTube</button>
   </div>
@@ -62,9 +69,10 @@
   <div class="status-line"><span>Status</span><b id="camStatus">STOPPED</b></div>
   <div class="status-line"><span>Resolution</span><b id="resolution">—</b></div>
  </div></div>
- <div class="cl-card status-card"><div class="hd">Ball Tracking</div><div class="bd">
-  <div class="status-line"><span>Status</span><b id="trackingStatus">OFF</b></div>
+ <div class="cl-card status-card"><div class="hd">Ball Tracking & Auto Zoom</div><div class="bd">
+  <div class="status-line"><span>Tracking Status</span><b id="trackingStatus">OFF</b></div>
   <div class="status-line"><span>Confidence</span><b id="confidence">—</b></div>
+  <div class="status-line"><span>Auto Zoom</span><b id="zoomStatus">OFF (1.0x)</b></div>
  </div></div>
  <div class="cl-card status-card"><div class="hd">Recording / Stream</div><div class="bd">
   <div class="status-line"><span>Recording</span><b id="recordStatus">IDLE</b></div>
@@ -87,8 +95,69 @@
   await CL.shell("preview.html","Live Preview");
   const $=id=>document.getElementById(id);
   let camera=false, tracking=false, ytLive=false, overlay=true, frameStarted=false;
-  let detection=null,lastFrameW=0,lastFrameH=0,lastDetectionAt=0;
+  let autoZoom=false;
+  let currentZoom=1.0, targetZoom=1.0;
+  let currentOriginX=50, currentOriginY=50, targetOriginX=50, targetOriginY=50;
+  let detection=null, lastFrameW=0, lastFrameH=0, lastDetectionAt=0;
   const tc=$("trackCanvas"), tctx=tc.getContext("2d");
+
+  function setAutoZoomUI(on){
+    autoZoom=!!on;
+    $("autoZoomBtn").textContent=autoZoom?"🔍 Auto Zoom: ON":"🔍 Auto Zoom: OFF";
+    $("autoZoomBtn").className=autoZoom?"btn big-control zoom-active":"btn big-control";
+  }
+
+  function updateZoom(){
+    const hasBall = detection && lastFrameW && lastFrameH && (Date.now()-lastDetectionAt < 650);
+    if(autoZoom && hasBall){
+      const zFactor = detection.zoom_factor ? Math.max(1.4, Math.min(3.0, Number(detection.zoom_factor))) : 2.2;
+      targetZoom = zFactor;
+      const normX = detection.x / lastFrameW;
+      const normY = detection.y / lastFrameH;
+      targetOriginX = Math.max(12, Math.min(88, normX * 100));
+      targetOriginY = Math.max(12, Math.min(88, normY * 100));
+      $("zoomHud").textContent = `ZOOM: ${currentZoom.toFixed(1)}x • TRACKING`;
+      $("zoomHud").className = "hud-pill good";
+      $("zoomStatus").textContent = `ON (${currentZoom.toFixed(1)}x)`;
+    } else {
+      targetZoom = 1.0;
+      targetOriginX = 50;
+      targetOriginY = 50;
+      if(autoZoom){
+        $("zoomHud").textContent = `ZOOM: ${currentZoom.toFixed(1)}x • SEARCHING`;
+        $("zoomHud").className = "hud-pill warn";
+        $("zoomStatus").textContent = `SEARCHING (${currentZoom.toFixed(1)}x)`;
+      } else {
+        $("zoomHud").textContent = "ZOOM: 1.0x";
+        $("zoomHud").className = "hud-pill";
+        $("zoomStatus").textContent = "OFF (1.0x)";
+      }
+    }
+
+    const ease = 0.14;
+    currentZoom += (targetZoom - currentZoom) * ease;
+    currentOriginX += (targetOriginX - currentOriginX) * ease;
+    currentOriginY += (targetOriginY - currentOriginY) * ease;
+
+    const vp = $("previewViewport");
+    if(vp){
+      if(Math.abs(currentZoom - 1.0) < 0.005 && targetZoom === 1.0){
+        currentZoom = 1.0;
+        vp.style.transformOrigin = "50% 50%";
+        vp.style.transform = "none";
+      } else {
+        vp.style.transformOrigin = `${currentOriginX.toFixed(1)}% ${currentOriginY.toFixed(1)}%`;
+        vp.style.transform = `scale(${currentZoom.toFixed(3)})`;
+      }
+    }
+  }
+
+  function frameLoop(){
+    updateZoom();
+    requestAnimationFrame(frameLoop);
+  }
+  requestAnimationFrame(frameLoop);
+
   let ws=CL.tracker({
     onStatus:m=>{
       camera=!!m.camera_running;
@@ -97,6 +166,9 @@
       drawTracking();
       tracking=!!m.tracking;
       setCameraUI(m); setTrackingUI(m);
+      if(typeof m.auto_zoom === "boolean" && m.auto_zoom !== autoZoom){
+        setAutoZoomUI(m.auto_zoom);
+      }
       if(m.detected){
         $("ballHud").textContent=`BALL: ${Math.round((m.confidence||0)*100)}% • X ${m.x} Y ${m.y}`;
         $("confidence").textContent=Math.round((m.confidence||0)*100)+"%";
@@ -115,9 +187,16 @@
       $("confidence").textContent=Math.round((m.confidence||0)*100)+"%";
       drawTracking();
     },
+    onZoom:m=>{
+      if(m.zoom_factor && detection){
+        detection.zoom_factor = m.zoom_factor;
+      }
+    },
     onError:e=>show(e,true)
   });
+
   function show(t,err=false){$("message").textContent=t;$("message").style.color=err?"var(--red)":"var(--muted)";}
+
   function drawTracking(){
     const box=tc.getBoundingClientRect();
     const d=devicePixelRatio||1; tc.width=Math.max(1,Math.round(box.width*d)); tc.height=Math.max(1,Math.round(box.height*d));
@@ -145,6 +224,7 @@
     if(running && connected && !frameStarted){ $("cameraFrame").src="/api/camera/mjpeg"; frameStarted=true; $("empty").style.display="none"; }
     if(!running){ $("cameraFrame").removeAttribute("src"); frameStarted=false; $("empty").style.display=""; }
   }
+
   function setTrackingUI(m){
     tracking=!!m.tracking;
     $("trackingStatus").textContent=tracking?"ACTIVE":m.ai_connected?"READY":"OFFLINE";
@@ -153,24 +233,52 @@
     $("trackingBtn").textContent=tracking?"⏹ Stop Tracking":"🎯 Start Tracking";
     $("trackingBtn").className=tracking?"btn big-control running":"btn big-control";
   }
+
   $("cameraBtn").onclick=async()=>{
     try{
       if(camera){await CL.api("/api/camera/stop",{method:"POST"});show("Camera stopping…")} else {await CL.api("/api/camera/start",{method:"POST"});show("Camera starting…")}
     }catch(e){show(e.message,true)}
   };
-  $("trackingBtn").onclick=()=>{ const cmd=tracking?"stop_tracking":"start_tracking"; ws.send(cmd); show(cmd==="start_tracking"?"Ball tracking starting…":"Ball tracking stopping…"); };
+
+  $("trackingBtn").onclick=()=>{
+    const cmd=tracking?"stop_tracking":"start_tracking";
+    ws.send(cmd);
+    show(cmd==="start_tracking"?"Ball tracking starting…":"Ball tracking stopping…");
+  };
+
+  $("autoZoomBtn").onclick=()=>{
+    autoZoom = !autoZoom;
+    setAutoZoomUI(autoZoom);
+    if(autoZoom){
+      ws.send("enable_auto_zoom");
+      if(!tracking){
+        ws.send("start_tracking");
+        show("Auto Zoom ON — Starting ball tracking…");
+      } else {
+        show("Auto Zoom ON — Auto tracking and zooming ball");
+      }
+    } else {
+      ws.send("disable_auto_zoom");
+      show("Auto Zoom OFF");
+    }
+  };
+
   $("recordBtn").onclick=async()=>{
     try{const r=await CL.api("/api/recording/status"); if(["LIVE","STARTING","PAUSED"].includes(r.status)){await CL.api("/api/recording/stop",{method:"POST"});show("Recording stopped")}
     else {const d=(await CL.api("/api/db/cricket"))||{};await CL.api("/api/recording/start",{method:"POST",body:{match_name:`${d.batTeam||"Team A"} vs ${d.bowlTeam||"Team B"}`}});show("Recording starting…")}}
     catch(e){show(e.message,true)}
   };
+
   $("pauseBtn").onclick=async()=>{try{const r=await CL.api("/api/recording/status");await CL.api(`/api/recording/${r.status==="PAUSED"?"resume":"pause"}`,{method:"POST"});}catch(e){show(e.message,true)}};
+
   $("youtubeBtn").onclick=async()=>{try{
     const s=await CL.api("/api/stream/status"), d=s.destinations.youtube;
     if(["LIVE","STARTING"].includes(d.status)){await CL.api("/api/stream/stop?dest=youtube",{method:"POST"});show("YouTube stopped")}
     else {const r=await CL.api("/api/stream/youtube/start",{method:"POST"});show(r.status==="LIVE"?"YouTube is live":"YouTube starting…")}
   }catch(e){show(e.message,true)}};
+
   $("overlayBtn").onclick=()=>{overlay=!overlay;$("scoreOverlay").style.display=overlay?"":"none";$("overlayBtn").textContent=overlay?"👁 Score Overlay":"🚫 Score Overlay"};
+
   async function poll(){
     try{
       const [r,s]=await Promise.all([CL.api("/api/recording/status"),CL.api("/api/stream/status")]);

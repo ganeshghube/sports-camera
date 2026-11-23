@@ -76,6 +76,7 @@ INFERENCE_EVERY_N_FRAMES = _env("INFERENCE_EVERY_N_FRAMES", 1, int)
 AI_MAX_FPS = _env("AI_MAX_FPS", 20, int)
 MIN_TRACK_CONFIDENCE = _env("MIN_TRACK_CONFIDENCE", 0.35, float)
 AUTO_CAMERA_TRACK = _env("AUTO_CAMERA_TRACK", True, bool)
+DIGITAL_ZOOM = _env("DIGITAL_ZOOM", 1.0, float)    # 1.0 = no zoom, 2.0 = 2x zoom
 
 SHOW_DEBUG_WINDOW = _env("SHOW_DEBUG_WINDOW", False, bool)   # local window on/off
 SHOW_DEBUG_OVERLAY = _env("SHOW_DEBUG_OVERLAY", False, bool)  # extra graphics in window
@@ -331,6 +332,33 @@ def calculate_pan_tilt(bx, by, fw, fh):
     if TILT_REVERSE:
         tilt = -tilt
     return pan, tilt
+
+
+def calculate_zoom(bx, by, fw, fh, center_weight=0.5, max_zoom=3.0, min_zoom=1.0):
+    """
+    Calculate digital zoom factor based on ball position.
+    
+    - Ball at center: min_zoom (no zoom)
+    - Ball at edges: max_zoom (max zoom on the ball)
+    - Configurable center_weight controls how quickly zoom increases near edges
+    
+    The zoom factor ranges from min_zoom to max_zoom.
+    """
+    # Distance from center (normalized -1 to 1)
+    dx = (bx / fw) - 0.5
+    dy = (by / fh) - 0.5
+    
+    # Normalize distance - farther from center = more zoom
+    dist = (dx ** 2 + dy ** 2) ** 0.5  # 0 at center, sqrt(0.5) ≈ 0.707 at corner
+    
+    # Scale: max distance at corner is sqrt(0.5^2 + 0.5^2) = sqrt(0.5) ≈ 0.707
+    # Apply center_weight to control sensitivity
+    weighted_dist = dist * center_weight
+    
+    # Interpolate zoom factor
+    zoom = min_zoom + (max_zoom - min_zoom) * min(weighted_dist / (0.5 * center_weight), 1.0)
+    
+    return round(zoom, 2)
 
 
 # ------------------------------------------------------------ CAMERA
@@ -866,7 +894,7 @@ def main():
                                        USE_SERIAL if motor_driver == "serial" else False)
     camera = None
     tracker = BallTracker()
-    state = {"tracking": False, "camera": False, "reload": False}
+    state = {"tracking": False, "camera": False, "reload": False, "auto_zoom": False}
 
     def ensure_camera():
         nonlocal camera
@@ -923,6 +951,12 @@ def main():
             camera.restart()
         elif cmd in ("reload_model", "reload_config"):
             state["reload"] = True
+        elif cmd == "enable_auto_zoom":
+            state["auto_zoom"] = True
+            log("Auto zoom enabled")
+        elif cmd == "disable_auto_zoom":
+            state["auto_zoom"] = False
+            log("Auto zoom disabled")
 
     pub = Publisher(BACKEND_WS_URL, on_command)
 
@@ -1039,11 +1073,17 @@ def main():
             cx, cy = predicted if predicted is not None else ((ball["x"], ball["y"]) if ball is not None else (None, None))
 
             if (state["tracking"] and AUTO_CAMERA_TRACK and cx is not None
-                    and tracker.last_seen <= MAX_LOST_FRAMES
-                    and (ball is None or float(ball.get("confidence", 0)) >= MIN_TRACK_CONFIDENCE)):
-                controller.send(*calculate_pan_tilt(cx, cy, w, h))
+            and tracker.last_seen <= MAX_LOST_FRAMES
+            and (ball is None or float(ball.get("confidence", 0)) >= MIN_TRACK_CONFIDENCE)):
+                pan, tilt = calculate_pan_tilt(cx, cy, w, h)
+                controller.send(pan, tilt)
+                # Calculate and publish zoom factor
+                zoom = calculate_zoom(cx, cy, w, h)
+                pub.publish({"type": "zoom", "zoom_factor": zoom, "ball_x": cx, "ball_y": cy})
             else:
                 controller.stop()
+                zoom = 1.0
+                pub.publish({"type": "zoom", "zoom_factor": 1.0, "ball_x": None, "ball_y": None})
 
             recent = inference_times[-30:]
             avg = sum(recent) / len(recent) if recent else 0
@@ -1057,6 +1097,7 @@ def main():
                     "x": int(ball["x"]), "y": int(ball["y"]), "box": list(ball["box"]),
                     "frame_width": w, "frame_height": h, "fps": round(inference_fps, 1),
                     "motor_target_x": round(w * TARGET_X, 1), "motor_target_y": round(h * TARGET_Y, 1),
+                    "zoom_factor": zoom,
                 })
 
             if (PREVIEW_STREAM and pub.connected
@@ -1136,6 +1177,7 @@ def status_msg(camera, detector, state, fps, cam_fps, latency_ms, pub,
         "last_detection": last_ts,
         "frame_width": w, "frame_height": h,
         "auto_camera_track": bool(AUTO_CAMERA_TRACK),
+        "auto_zoom": bool(state.get("auto_zoom", False)),
         "min_track_confidence": round(float(MIN_TRACK_CONFIDENCE), 3),
         "system": system_metrics(),
     }

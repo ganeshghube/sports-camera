@@ -140,6 +140,25 @@ def build_router(store, require_user, current_user, log, root: Path,
                 rgb = colorsys.hls_to_rgb((abs(hv) % 360) / 360.0, 0.35, 0.65)
                 return tuple(int(x * 255) for x in rgb[::-1]) if n else fallback
 
+            # Apply digital zoom if configured
+            zoom_factor = settings().get("digital_zoom", 1.0)
+            if zoom_factor != 1.0:
+                try:
+                    h, w = img.shape[:2]
+                    # Calculate zoom crop region centered on frame center
+                    cx, cy = w // 2, h // 2
+                    new_w = int(w / zoom_factor)
+                    new_h = int(h / zoom_factor)
+                    x1 = max(0, cx - new_w // 2)
+                    y1 = max(0, cy - new_h // 2)
+                    x2 = min(w, cx + new_w // 2)
+                    y2 = min(h, cy + new_h // 2)
+                    # Crop and resize back to original size
+                    cropped = img[y1:y2, x1:x2]
+                    img = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
+                except Exception as exc:
+                    log(f"Zoom apply warning: {exc}")
+
             def fit(text, max_chars):
                 text = str(text or "—").strip()
                 return text if len(text) <= max_chars else text[:max_chars - 1] + "…"
@@ -378,7 +397,8 @@ def build_router(store, require_user, current_user, log, root: Path,
             "youtube_latency", "youtube_resolution", "youtube_fps",
             "youtube_bitrate_k", "youtube_audio_bitrate_k", "youtube_profile",
             "auto_camera_track", "min_track_confidence", "ai_max_fps",
-            "motor_driver", "pan_step_pin", "pan_dir_pin", "tilt_step_pin", "tilt_dir_pin"
+            "motor_driver", "pan_step_pin", "pan_dir_pin", "tilt_step_pin", "tilt_dir_pin",
+            "digital_zoom", "zoom_max", "zoom_min", "zoom_sensitivity"
         )
         for k in allowed:
             if k in body:
