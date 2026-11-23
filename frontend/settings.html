@@ -38,6 +38,10 @@
         <h3>🥧 Raspberry Pi Camera</h3>
         <p>CSI camera via Picamera2/libcamera (V4L2 fallback).</p>
       </div>
+      <div class="camera-card" data-type="android">
+        <h3>📱 Android Camera</h3>
+        <p>Built-in phone camera via IP Webcam / loopback (http://127.0.0.1:8080/video).</p>
+      </div>
     </div>
 
     <div class="form-grid" style="margin-top:14px">
@@ -262,7 +266,7 @@
           <select class="in" id="motor_driver">
             <option value="none">None — tracking only</option>
             <option value="gpio">Raspberry Pi GPIO STEP/DIR</option>
-            <option value="serial">ESP32 serial pan/tilt</option>
+            <option value="serial">ESP32 serial pan/tilt (USB-OTG / Bluetooth / COM)</option>
           </select>
         </label>
         <label class="f">Pan STEP GPIO
@@ -302,7 +306,8 @@
   const types = {
     network: "Wi-Fi / RTSP",
     usb: "USB Camera",
-    rpi: "Raspberry Pi Camera"
+    rpi: "Raspberry Pi Camera",
+    android: "Android Phone Camera"
   };
 
   const setB = (id, t, c) => {
@@ -324,7 +329,10 @@
       document.querySelectorAll(".camera-card").forEach(x =>
         x.classList.toggle("selected", x === card)
       );
-      $("selectedLabel").textContent = "Selected: " + types[selectedType];
+      if (selectedType === "android" && (!$("rtsp_url").value || $("rtsp_url").value.startsWith("rtsp://192.168.1.50"))) {
+        $("rtsp_url").value = "http://127.0.0.1:8080/video";
+      }
+      $("selectedLabel").textContent = "Selected: " + (types[selectedType] || selectedType);
     };
   });
 

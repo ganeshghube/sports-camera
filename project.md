@@ -22,10 +22,28 @@ Scoring shows the live score controls and the same score-bar page (`index.html?s
 Final Output owns the camera preview. Final Output composes that camera image with the transparent public score overlay (`index.html?overlay=1`) and scales responsively to the available 16:9 stage.
 
 ## Camera
-`CameraManager` is the central camera abstraction. It supports RTSP/Wi-Fi network cameras, USB cameras, and Raspberry Pi/V4L2 cameras where supported by the host. Camera settings are saved through the Setup Camera / Streaming page.
+`CameraManager` is the central camera abstraction. It supports RTSP/Wi-Fi network cameras, USB cameras, Raspberry Pi/V4L2 cameras, and Android Phone cameras via local loopback (`http://127.0.0.1:8080/video`). Camera settings are saved through the Setup Camera / Streaming page.
 
-## Ball tracking
+## Ball tracking and Auto Zoom
 The AI tracker is supervised by `run.py` but remains idle until Start Tracking is pressed. Tracking and camera preview are independent UI operations. Start Tracking changes to Stop Tracking while active. The tracker reports real camera/model/detection/motor state and sends safe motor-stop commands when tracking is lost or stopped.
+
+Live Preview features smooth DOM-level Auto Zoom that centers and magnifies the tracked ball (1.0x to 2.8x) while leaving the score overlay unscaled.
+
+## Continuous Active Learning
+The system includes an automated continuous learning pipeline:
+- **AutoHarvester**: Automatically captures high-confidence ball detections during camera operation.
+- **Dataset Preservation**: Accumulates frames without overwriting historical datasets.
+- **Backbone-Frozen Fine-Tuning**: Trains on `models/best.pt` with `--freeze 10` to prevent catastrophic forgetting.
+- **Hot-Reloading**: Deploys updated models to the active tracker process with zero downtime.
+- **Version History & Rollback**: Enables 1-click restoration of any previously deployed model.
+
+## Android Phone Plug-and-Play Support
+The system is fully operational on Android devices (6 GB RAM recommended) using Termux:
+- **Camera**: Connects to the device's native camera sensors via IP Webcam local loopback.
+- **Motor Control**: Supports ESP32 pan/tilt mounts via USB-OTG (`/dev/ttyUSB0`) or Bluetooth SPP (`/dev/rfcomm0`).
+- **AI Engine**: Automatically falls back to native Ultralytics PyTorch inference on ARM64 CPU when OpenVINO is unavailable.
+- **One-Command Setup**: Configurable via `tools/setup_android.sh` and launched via `start_android.sh`.
+- Detailed setup: see `DEPLOYMENT_ANDROID.md`.
 
 ## Recording and streaming
 Recording uses explicit IDLE/STARTING/RECORDING/PAUSED/STOPPING/ERROR states. Start becomes Stop while active and Pause/Resume is available when valid. Streaming has the same start/stop state model. The current FFmpeg streaming path uses the selected camera source; the browser Final Output is the authoritative camera+graphics preview.

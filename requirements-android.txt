@@ -1,0 +1,12 @@
+# Android / Termux ARM64 requirements
+# Omit x86-only openvino and playwright
+fastapi
+uvicorn[standard]
+httpx
+python-dotenv
+psutil>=5.9
+websocket-client>=1.8,<2
+opencv-python
+numpy
+ultralytics
+pyserial

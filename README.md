@@ -6,29 +6,39 @@ This is the existing Cricket Live application updated for a clean Windows/Git Ba
 
 ```text
 Camera Source
-   ├── Wi-Fi / RTSP / phone camera
+   ├── Android Phone Camera (IP Webcam loopback / RTSP)
+   ├── Wi-Fi / RTSP / network camera
    ├── USB camera
    └── Raspberry Pi camera
           │
-          ├── Live Preview
+          ├── Live Preview (with Smooth Auto Zoom on ball)
           ├── Recording
           ├── Streaming
+          ├── Continuous Learning (Auto-harvesting & background fine-tuning)
           └── AI Ball Tracking (separate supervised process)
                     │
-                    └── ESP32 pan/tilt motor (optional)
+                    └── ESP32 pan/tilt motor (USB-OTG, Bluetooth, or Serial)
 ```
 
 The scorer remains in control of the official score. AI ball detection is informational and can drive the optional pan/tilt motor when tracking is enabled.
 
 ## One-command start
 
-Use Python 3.11.
+### On Windows / PC:
+Use Python 3.11+.
 
 ```bash
-cd /c/00_Ganesh/camera
+cd /c/00_Ganesh/Sports-Camera
 source .venv/Scripts/activate
 python run.py
 ```
+Or simply double-click `START_WINDOWS.bat`.
+
+### On Android Phone (Termux, 6GB RAM):
+```bash
+./start_android.sh
+```
+See [Android Deployment Guide](DEPLOYMENT_ANDROID.md) for 1-step installation.
 
 `run.py` starts:
 1. FastAPI on `0.0.0.0:8000`
@@ -98,6 +108,57 @@ The Final Output page is the camera/program-output workspace:
 - Start/Stop Camera
 - responsive camera preview
 - live score overlay
+- **Auto Zoom in Live Preview**: Center & track the ball in real time with smooth digital zoom (`1.0x` - `2.8x`). Toggle via the `🔍 Auto Zoom` button.
+- **Continuous Learning Status**: Displays real-time auto-harvested frame counts and model status.
+
+### Ball Tracking & Auto Zoom
+
+The AI tracker has one stateful button:
+
+```text
+START TRACKING → STOP TRACKING
+```
+
+When tracking is active, the system detects the cricket ball, updates the motor pan/tilt position, and dynamically adjusts the Live Preview viewport zoom if Auto Zoom is enabled.
+
+### Continuous Active Learning & Auto-Training
+
+Never lose model accuracy when retraining. The continuous active learning system:
+1. **Auto-Harvester**: Automatically captures high-confidence ball detections and balanced negative background frames during live match play into `data/training_frames/`.
+2. **Cumulative Knowledge**: Dataset builds upon previous sessions without discarding old data (`3_build_dataset.py` merges and balances all collected frames).
+3. **Smart Fine-Tuning**: Trains from `models/best.pt` with `--freeze 10` backbone layers preserved, preventing catastrophic forgetting.
+4. **Zero-Interruption Hot-Reload**: Deploys the fine-tuned model immediately to the active AI tracker process without stopping your live stream or recording.
+5. **Model History & 1-Click Rollback**: Every trained model is archived with timestamps; restore any previous version instantly from the Training dashboard if needed.
+
+## Android Phone Plug-and-Play Deployment (6 GB RAM)
+
+You can turn any modern Android phone (6 GB RAM recommended) into a standalone cricket broadcast, AI ball tracking, and motorized camera station!
+
+### 1. One-Command Setup
+Install **Termux** from F-Droid, clone the repo, and run:
+```bash
+bash tools/setup_android.sh
+```
+This automatically sets up Python, build essentials, and ARM64-optimized dependencies (`requirements-android.txt`).
+
+### 2. Camera Setup (IP Webcam)
+Android sandboxes direct `/dev/video*` access. The system seamlessly connects to the phone's native camera via local loopback:
+- Install **IP Webcam** (free on Play Store).
+- Open IP Webcam, set video resolution to 1280x720, and tap **Start Server**.
+- Cricket Live connects directly to `http://127.0.0.1:8080/video`.
+- In **Settings → Camera**, simply select the **📱 Android Camera** preset!
+
+### 3. Pan/Tilt Motor Attachment
+Attach an ESP32 pan/tilt servo mount directly to your phone:
+- **USB-OTG**: Plug the ESP32 into the phone's USB-C port via a USB-OTG adapter. The tracker auto-scans `/dev/ttyUSB0` / `/dev/ttyACM0`.
+- **Bluetooth Serial**: Pair your phone with an ESP32 Bluetooth SPP module (`rfcomm0`).
+- The controller features automatic port fallback and auto-reconnect.
+
+### 4. Run
+```bash
+./start_android.sh
+```
+The script detects your phone's Wi-Fi IP and opens the web interface. Full instructions: [DEPLOYMENT_ANDROID.md](DEPLOYMENT_ANDROID.md).
 - recording Start/Stop
 - recording Pause/Resume
 - YouTube/Facebook/Custom RTMP Start/Stop

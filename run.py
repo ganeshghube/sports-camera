@@ -17,8 +17,19 @@ import time
 from pathlib import Path
 
 
-CORE_IMPORTS = ("fastapi", "uvicorn", "httpx", "dotenv", "playwright", "psutil", "websocket")
-AI_IMPORTS = ("cv2", "numpy", "openvino", "ultralytics", "serial")
+IS_ANDROID = (
+    os.path.exists("/data/data/com.termux")
+    or "ANDROID_ROOT" in os.environ
+    or "TERMUX_VERSION" in os.environ
+    or getattr(sys, "platform", "") == "android"
+)
+
+if IS_ANDROID:
+    CORE_IMPORTS = ("fastapi", "uvicorn", "httpx", "dotenv", "psutil", "websocket")
+    AI_IMPORTS = ("cv2", "numpy", "ultralytics", "serial")
+else:
+    CORE_IMPORTS = ("fastapi", "uvicorn", "httpx", "dotenv", "playwright", "psutil", "websocket")
+    AI_IMPORTS = ("cv2", "numpy", "openvino", "ultralytics", "serial")
 
 ROOT = Path(__file__).resolve().parent
 os.chdir(ROOT)
@@ -73,11 +84,14 @@ def ensure_project_dependencies():
         print("[launcher] Please recreate the virtual environment and install requirements.txt.", flush=True)
         raise SystemExit(2)
 
-    requirements = []
-    if missing_core:
-        requirements.append(ROOT / "requirements.txt")
-    if missing_ai:
-        requirements.append(ROOT / "ai" / "requirements.txt")
+    if IS_ANDROID:
+        requirements = [ROOT / "requirements-android.txt"]
+    else:
+        requirements = []
+        if missing_core:
+            requirements.append(ROOT / "requirements.txt")
+        if missing_ai:
+            requirements.append(ROOT / "ai" / "requirements.txt")
 
     for req in requirements:
         print(f"[launcher] Installing project dependencies from {req.relative_to(ROOT)}...", flush=True)
@@ -103,6 +117,9 @@ def ensure_browser_renderer_dependencies():
     helper remains as a defensive fallback for environments where an import
     failed after the initial dependency check.
     """
+    if IS_ANDROID:
+        print("[launcher] Android environment detected; using lightweight native broadcast overlay (Playwright skipped).", flush=True)
+        return
     try:
         import playwright.sync_api  # noqa: F401
         return

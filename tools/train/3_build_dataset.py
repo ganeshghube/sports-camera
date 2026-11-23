@@ -64,7 +64,7 @@ def main():
 
     n_val   = max(1, int(len(pairs) * args.val_split))
     n_train = len(pairs) - n_val
-    splits  = {"train": pairs[:n_train], "val": pairs[n_val:]}
+    splits  = {"train": pairs[:n_train], "val": pairs[n_train:]}
 
     counts = {}
     for split, ps in splits.items():

@@ -138,12 +138,23 @@ class PanTiltController:
             return
         try:
             import serial
-            log(f"Connecting to ESP32 {port} @ {baudrate}")
-            self.serial = serial.Serial(port, baudrate, timeout=0.05)
-            time.sleep(2)
-            log("ESP32 connected")
+            ports_to_try = [port]
+            if os.name != "nt" or str(port).lower() in ("auto", "detect"):
+                for p in ("/dev/ttyUSB0", "/dev/ttyACM0", "/dev/rfcomm0", "/dev/ttyUSB1", "/dev/ttyACM1"):
+                    if p not in ports_to_try:
+                        ports_to_try.append(p)
+            for p in ports_to_try:
+                try:
+                    log(f"Connecting to ESP32 {p} @ {baudrate}")
+                    self.serial = serial.Serial(p, baudrate, timeout=0.05)
+                    time.sleep(1.5)
+                    log(f"ESP32 connected on {p}")
+                    return
+                except Exception:
+                    self.serial = None
+            log(f"WARNING: ESP32 unavailable on ports {ports_to_try}; continuing without motors")
         except Exception as e:
-            log(f"WARNING: ESP32 unavailable ({e}); continuing without motors")
+            log(f"WARNING: pyserial unavailable ({e}); continuing without motors")
             self.serial = None
 
     def send(self, pan, tilt):
@@ -175,90 +186,116 @@ class PanTiltController:
 
 # ------------------------------------------------------------ MODEL
 class Detector:
-    """OpenVINO YOLO detector with AUTO/GPU/CPU device selection."""
+    """YOLO detector supporting OpenVINO (PC/Intel) with automatic PyTorch fallback (Android/ARM64)."""
 
     def __init__(self):
         self.compiled = None
+        self.yolo_model = None
         self.device_used = None
         self.error = None
         self.ov_version = None
 
     @property
     def ready(self):
-        return self.compiled is not None
+        return self.compiled is not None or self.yolo_model is not None
 
     def load(self, model_path=None):
-        self.compiled, self.error = None, None
+        self.compiled, self.yolo_model, self.error = None, None, None
         model_path = model_path or MODEL_PATH
-        try:
-            import openvino as ov
-        except Exception as e:
-            self.error = f"OpenVINO unavailable: {e}"
-            return False
-        self.ov_version = ov.__version__
-        core = ov.Core()
-        available = core.available_devices
-        log(f"OpenVINO {ov.__version__}, devices: {available}")
-
-        if DEVICE == "GPU":
-            if "GPU" not in available:
-                self.error = "DEVICE=GPU but no Intel GPU available"
-                return False
-            device = "GPU"
-        elif DEVICE == "CPU":
-            device = "CPU"
-        else:
-            device = "GPU" if "GPU" in available else "CPU"
 
         if not os.path.exists(model_path):
             self.error = f"AI model missing: {model_path}"
             return False
 
-        stem = os.path.splitext(model_path)[0]
-        xml_file = os.path.join(stem + "_openvino_model",
-                                os.path.basename(stem) + ".xml")
+        # 1. Try OpenVINO first (optimized for Intel / PC / Pi)
+        ov_error = None
         try:
+            import openvino as ov
+            self.ov_version = ov.__version__
+            core = ov.Core()
+            available = core.available_devices
+            log(f"OpenVINO {ov.__version__}, devices: {available}")
+            if DEVICE == "GPU":
+                if "GPU" not in available:
+                    raise RuntimeError("DEVICE=GPU requested but no OpenVINO GPU found")
+                device = "GPU"
+            elif DEVICE == "CPU":
+                device = "CPU"
+            else:
+                device = "GPU" if "GPU" in available else "CPU"
+
+            stem = os.path.splitext(model_path)[0]
+            xml_file = os.path.join(stem + "_openvino_model", os.path.basename(stem) + ".xml")
             if not os.path.exists(xml_file):
                 log("OpenVINO model not found; exporting from .pt ...")
                 from ultralytics import YOLO
                 YOLO(model_path).export(format="openvino", imgsz=INPUT_SIZE)
             self.compiled = core.compile_model(core.read_model(xml_file), device)
-            self.device_used = device
-            log(f"Model loaded on {device}")
+            self.device_used = f"{device} (OpenVINO)"
+            log(f"Model loaded on {self.device_used}")
             return True
-        except Exception as e:
-            self.error = f"Model load failed: {e}"
-            self.compiled = None
+        except Exception as exc:
+            ov_error = exc
+
+        # 2. Universal PyTorch / Ultralytics fallback (Android ARM64, CPU, CUDA)
+        try:
+            log(f"Loading native PyTorch/Ultralytics model (OpenVINO skipped: {ov_error})...")
+            from ultralytics import YOLO
+            self.yolo_model = YOLO(model_path)
+            self.device_used = "CPU (PyTorch)"
+            self.ov_version = "PyTorch/ARM64"
+            log(f"Model loaded with Ultralytics on {self.device_used}")
+            return True
+        except Exception as exc:
+            self.error = f"Model load failed: {exc}"
+            log(f"❌ {self.error}")
             return False
 
     def detect(self, frame):
         h, w = frame.shape[:2]
-        img = cv2.resize(frame, (INPUT_SIZE, INPUT_SIZE))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = np.expand_dims(
-            np.transpose(img.astype(np.float32) / 255.0, (2, 0, 1)), 0)
-        out = np.squeeze(self.compiled([img])[self.compiled.outputs[0]])
-        if out.ndim != 2:
-            return []
-        if out.shape[0] < out.shape[1]:
-            out = out.T
-        sx, sy = w / INPUT_SIZE, h / INPUT_SIZE
-        dets = []
-        for d in out:
-            if len(d) < 5:
-                continue
-            conf = float(d[4])
-            if conf < CONFIDENCE:
-                continue
-            xc, yc, bw, bh = (float(v) for v in d[:4])
-            x1 = max(0, min(w - 1, int((xc - bw / 2) * sx)))
-            y1 = max(0, min(h - 1, int((yc - bh / 2) * sy)))
-            x2 = max(0, min(w - 1, int((xc + bw / 2) * sx)))
-            y2 = max(0, min(h - 1, int((yc + bh / 2) * sy)))
-            if x2 <= x1 or y2 <= y1:
-                continue
-            dets.append({"box": (x1, y1, x2, y2), "confidence": conf})
-        return dets
+        if self.compiled is not None:
+            img = cv2.resize(frame, (INPUT_SIZE, INPUT_SIZE))
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = np.expand_dims(
+                np.transpose(img.astype(np.float32) / 255.0, (2, 0, 1)), 0)
+            out = np.squeeze(self.compiled([img])[self.compiled.outputs[0]])
+            if out.ndim != 2:
+                return []
+            if out.shape[0] < out.shape[1]:
+                out = out.T
+            sx, sy = w / INPUT_SIZE, h / INPUT_SIZE
+            dets = []
+            for d in out:
+                if len(d) < 5:
+                    continue
+                conf = float(d[4])
+                if conf < CONFIDENCE:
+                    continue
+                xc, yc, bw, bh = (float(v) for v in d[:4])
+                x1 = max(0, min(w - 1, int((xc - bw / 2) * sx)))
+                y1 = max(0, min(h - 1, int((yc - bh / 2) * sy)))
+                x2 = max(0, min(w - 1, int((xc + bw / 2) * sx)))
+                y2 = max(0, min(h - 1, int((yc + bh / 2) * sy)))
+                if x2 <= x1 or y2 <= y1:
+                    continue
+                dets.append({"box": (x1, y1, x2, y2), "confidence": conf})
+            return dets
+
+        elif self.yolo_model is not None:
+            try:
+                results = self.yolo_model.predict(
+                    frame, imgsz=INPUT_SIZE, conf=CONFIDENCE, verbose=False, device="cpu"
+                )
+                dets = []
+                if results and len(results) > 0:
+                    for b in results[0].boxes:
+                        conf = float(b.conf[0])
+                        x1, y1, x2, y2 = [int(v) for v in b.xyxy[0]]
+                        dets.append({"box": (x1, y1, x2, y2), "confidence": conf})
+                return dets
+            except Exception:
+                return []
+        return []
 
 
 def select_best_ball(detections):
@@ -499,7 +536,28 @@ class CameraReader:
     def _open(self):
         cfg = self.config
         ctype = str(cfg.get("camera_type") or "network").lower()
-        if ctype in ("usb", "rpi", "raspberry_pi"):
+        if ctype in ("android", "phone"):
+            urls = []
+            if cfg.get("rtsp_url"):
+                urls.append(str(cfg.get("rtsp_url")).strip())
+            urls += [
+                "http://127.0.0.1:8080/video",
+                "rtsp://127.0.0.1:8080/h264.sdp",
+                "http://localhost:8080/video",
+            ]
+            for url in urls:
+                try:
+                    log(f"Opening Android camera stream: {url}")
+                    cap = cv2.VideoCapture(url)
+                    if cap.isOpened() and self._read_test_frames(cap, count=2, timeout=2.5):
+                        log(f"Android camera connected successfully via {url}")
+                        return cap
+                    self._release_capture(cap)
+                except Exception:
+                    pass
+            log("Android camera stream not reachable. Ensure IP Webcam or RTSP app is running on port 8080.")
+            return None
+        elif ctype in ("usb", "rpi", "raspberry_pi"):
             device = cfg.get("camera_device", 0)
             res = str(cfg.get("resolution") or "1280x720")
             w, h = self._parse_resolution(res)

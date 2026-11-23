@@ -122,6 +122,31 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
   </div>
 </div>
 
+<!-- Continuous Auto-Train Banner -->
+<div class="card" style="margin: 14px auto 0; max-width: 1100px; border-left: 4px solid var(--navy); background: #fff;">
+  <div class="card-bd row" style="justify-content: space-between; gap: 14px;">
+    <div>
+      <div style="font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+        <span>🔄 Continuous Active Learning & Auto-Train</span>
+        <span class="badge ok" id="autoTrainBadge">ENABLED</span>
+      </div>
+      <div class="hint" style="margin-top: 4px;">
+        Every time you use the camera, high-confidence ball frames and background samples are auto-harvested.
+        Fine-tuning builds on top of <code>models/best.pt</code> with prior frames preserved, preventing knowledge loss.
+      </div>
+      <div class="row" style="margin-top: 8px; gap: 16px; font-size: 12px;">
+        <span>📸 Harvested this session: <b id="autoHarvestedSession">0</b></span>
+        <span>📚 Cumulative library: <b id="autoCumulativeFrames">0</b> frames</span>
+        <span>🎯 Latest mAP50: <b id="autoLastMap">—</b></span>
+      </div>
+    </div>
+    <div class="row" style="gap: 8px;">
+      <button class="btn" id="autoToggleBtn" onclick="toggleAutoTrain()">Disable Auto-Harvest</button>
+      <button class="btn primary lg" id="autoTrainNowBtn" onclick="runAutoTrainNow()">⚡ Auto-Train & Deploy Now</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════ STEP 1: CAPTURE -->
 <div class="panel active" id="step1">
   <div style="margin-bottom:10px" class="row">
@@ -356,11 +381,18 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
   <div id="deployDoneCard" class="card" style="margin-top:12px;display:none;border-color:var(--green2)">
     <div class="card-hd" style="background:var(--green)">🎉 Model Deployed!</div>
     <div class="card-bd row">
-      <div>New model is live. Restart the AI tracker to use it.</div>
+      <div>New model is live and hot-reloaded into the running camera feed!</div>
       <div class="row" style="margin-left:auto;gap:8px">
-        <a class="btn" href="preview.html">Go to Preview</a>
-        <button class="btn primary" onclick="restartTracker()">↺ Restart Tracker</button>
+        <a class="btn primary" href="preview.html">Go to Live Preview</a>
       </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="card-hd">📜 Model History & Rollback</div>
+    <div class="card-bd">
+      <div class="hint" style="margin-bottom:8px">All prior model weights are backed up in <code>models/backup/</code>. You can instantly restore any previous version with 1 click.</div>
+      <div id="backupList" style="display:grid; gap:8px; max-height:220px; overflow-y:auto"></div>
     </div>
   </div>
 </div>
@@ -397,6 +429,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
     if (n === 3) refreshTrainStatus();
     if (n === 4) {
       refreshTrainStatus();
+      loadModelHistory();
       const m = document.getElementById('newMap');
       // show latest metrics
     }
@@ -744,6 +777,78 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
       await CL.api('/api/tracker/stop', { method: 'POST' });
       setTimeout(() => CL.toast('Tracker restarted — go to Preview to start tracking'), 1000);
     } catch(e) {}
+  };
+
+  // ── Auto-Train & Continuous Learning ──────────────────────────────────────
+  window.toggleAutoTrain = async () => {
+    try {
+      const res = await CL.api('/api/training/auto/toggle', { method: 'POST' });
+      CL.toast(res.auto_train_enabled ? 'Auto-Harvest & Continuous Learning enabled' : 'Auto-Harvest disabled');
+      refreshAutoStatus();
+    } catch (e) { CL.toast(e.message, true); }
+  };
+
+  window.runAutoTrainNow = async () => {
+    try {
+      const res = await CL.api('/api/training/auto/train-now', { method: 'POST' });
+      CL.toast('⚡ Continuous auto-training started in background!');
+      gotoStep(3);
+      startTrainPoll();
+    } catch (e) { CL.toast(e.message, true); }
+  };
+
+  async function refreshAutoStatus() {
+    try {
+      const s = await CL.api('/api/training/auto/status');
+      const b = document.getElementById('autoTrainBadge');
+      const btn = document.getElementById('autoToggleBtn');
+      if (b && btn) {
+        b.textContent = s.auto_train_enabled ? 'ENABLED' : 'DISABLED';
+        b.className = 'badge ' + (s.auto_train_enabled ? 'ok' : 'warn');
+        btn.textContent = s.auto_train_enabled ? 'Disable Auto-Harvest' : 'Enable Auto-Harvest';
+      }
+      if (document.getElementById('autoHarvestedSession')) {
+        document.getElementById('autoHarvestedSession').textContent = s.harvested_session || 0;
+      }
+      if (document.getElementById('autoCumulativeFrames')) {
+        document.getElementById('autoCumulativeFrames').textContent = s.total_frames || 0;
+      }
+      if (document.getElementById('autoLastMap')) {
+        document.getElementById('autoLastMap').textContent = s.last_mAP50 ? (s.last_mAP50 * 100).toFixed(1) + '%' : '—';
+      }
+    } catch (e) {}
+  }
+  setInterval(refreshAutoStatus, 3000);
+  refreshAutoStatus();
+
+  async function loadModelHistory() {
+    try {
+      const data = await CL.api('/api/training/models/history');
+      const bl = document.getElementById('backupList');
+      if (!bl) return;
+      if (!data.backups || !data.backups.length) {
+        bl.innerHTML = '<div class="hint">No backups created yet. Old models are backed up automatically during deploy.</div>';
+        return;
+      }
+      bl.innerHTML = data.backups.map(b => `
+        <div class="row" style="justify-content:space-between; padding:8px 12px; background:#f8fafc; border:1px solid var(--border); border-radius:6px">
+          <div>
+            <b>Backup: ${b.stamp}</b>
+            <div class="hint">${b.path}</div>
+          </div>
+          <button class="btn" onclick="rollbackModel('${b.stamp}')">⏪ Rollback to this</button>
+        </div>
+      `).join('');
+    } catch (e) {}
+  }
+
+  window.rollbackModel = async (stamp) => {
+    if (!confirm(`Rollback models/best.pt to backup ${stamp}?`)) return;
+    try {
+      await CL.api('/api/training/models/rollback', { method: 'POST', body: { stamp } });
+      CL.toast(`✅ Successfully rolled back to ${stamp} and hot-reloaded tracker!`);
+      loadModelHistory();
+    } catch (e) { CL.toast(e.message, true); }
   };
 
   // ── Init ───────────────────────────────────────────────────────────────────

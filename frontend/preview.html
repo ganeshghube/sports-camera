@@ -73,6 +73,7 @@
   <div class="status-line"><span>Tracking Status</span><b id="trackingStatus">OFF</b></div>
   <div class="status-line"><span>Confidence</span><b id="confidence">—</b></div>
   <div class="status-line"><span>Auto Zoom</span><b id="zoomStatus">OFF (1.0x)</b></div>
+  <div class="status-line"><span>Continuous Learning</span><b id="autoTrainStatus">ACTIVE</b></div>
  </div></div>
  <div class="cl-card status-card"><div class="hd">Recording / Stream</div><div class="bd">
   <div class="status-line"><span>Recording</span><b id="recordStatus">IDLE</b></div>
@@ -303,6 +304,11 @@
       $("streamHud").className="hud-pill "+(ytLive?"live":"");
       $("youtubeBtn").textContent=ytLive?"⏹ Stop YouTube":"▶ Start YouTube";
       $("youtubeBtn").className=ytLive?"btn big-control running":"btn primary big-control";
+      try{
+        const at = await CL.api("/api/training/auto/status");
+        $("autoTrainStatus").textContent = at.auto_train_enabled ? `ACTIVE (${at.total_frames} frames)` : "DISABLED";
+        $("autoTrainStatus").style.color = at.auto_train_enabled ? "var(--green)" : "var(--muted)";
+      }catch(e){ }
     }catch(e){ }
   }
   await poll(); setInterval(poll,1000);
