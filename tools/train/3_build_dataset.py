@@ -93,7 +93,7 @@ def main():
         f"names: {CLASSES}\n",
         encoding="utf-8",
     )
-    print(f"\n✅ Dataset ready at: {out_dir}/")
+    print(f"\nSUCCESS Dataset ready at: {out_dir}/")
     print(f"   data.yaml: {yaml_path}")
     print(f"\nNext: run Step 4 (train.py) to fine-tune the model.")
 

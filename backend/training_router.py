@@ -47,6 +47,8 @@ def _log(*msgs):
         for line in str(m).splitlines():
             line = line.rstrip()
             if line:
+                # Ensure ASCII-safe logging to avoid Windows cp1252 encoding issues
+                line = line.encode('ascii', errors='replace').decode('ascii')
                 _state["log"].append(line)
     if len(_state["log"]) > 600:
         _state["log"] = _state["log"][-600:]
@@ -203,7 +205,7 @@ def build_router(auth_dep, frame_getter=None) -> APIRouter:
                      "--labels", str(LABELS_DIR),
                      "--out",    str(DATASET_DIR),
                      "--val-split", "0.15"],
-                    capture_output=True, text=True, cwd=str(ROOT)
+                    capture_output=True, text=True, encoding='utf-8', cwd=str(ROOT)
                 )
                 _log(r.stdout, r.stderr)
                 if r.returncode != 0:
@@ -229,7 +231,7 @@ def build_router(auth_dep, frame_getter=None) -> APIRouter:
                      "--freeze",  "10",
                      "--patience","10"],
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, cwd=str(ROOT)
+                    text=True, encoding='utf-8', cwd=str(ROOT)
                 )
 
                 for line in _proc.stdout:
@@ -303,7 +305,7 @@ def build_router(auth_dep, frame_getter=None) -> APIRouter:
         r = subprocess.run(
             [sys.executable, str(ROOT / "tools/train/5_export_and_deploy.py"),
              "--model", best],
-            capture_output=True, text=True, cwd=str(ROOT)
+            capture_output=True, text=True, encoding='utf-8', cwd=str(ROOT)
         )
         _log(r.stdout, r.stderr)
         if r.returncode != 0:

@@ -59,6 +59,7 @@ py -3.14 -m venv .venv
 source .venv/Scripts/activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements.txt
+pip install ultralytics opencv-python numpy psutil websocket-client
 python -m pip install -r ai/requirements.txt
 [ -f .env ] || cp .env.example .env
 python -c "from backend.system import SystemManager; print('SystemManager import OK')"
