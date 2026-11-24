@@ -45,11 +45,22 @@ def _redact_url(url):
 
 def build_router(store, require_user, current_user, log, root: Path,
                  camera_status_getter=None, camera_control=None,
-                 frame_getter=None, camera_discover=None):
+                 frame_getter=None, camera_discover=None,
+                 tracker_holder=None):
     r = APIRouter()
     rec_dir = Path(os.environ.get("RECORDINGS_DIR", root / "recordings"))
     rec_dir.mkdir(parents=True, exist_ok=True)
     lock = threading.RLock()
+
+    # Track gradual zoom transitions for the Python OpenCV broadcast fallback
+    zoom_state = {
+        "current_zoom": 1.0,
+        "target_zoom": 1.0,
+        "current_cx": 0.5,
+        "current_cy": 0.5,
+        "target_cx": 0.5,
+        "target_cy": 0.5,
+    }
 
     # One place for image/video preview frames. The AI worker owns the actual
     # hardware capture and publishes JPEGs to FastAPI.
@@ -97,7 +108,7 @@ def build_router(store, require_user, current_user, log, root: Path,
         target/free-hit badges and scorecard) rather than drawing a second, simpler
         overlay.
         """
-        if not frame or not settings().get("broadcast_overlay", True):
+        if frame is None or len(frame) == 0:
             return frame
         try:
             import cv2
@@ -108,6 +119,60 @@ def build_router(store, require_user, current_user, log, root: Path,
             if img is None:
                 return frame
             h, w = img.shape[:2]
+
+            # Apply AI auto zoom or manual digital zoom
+            auto_zoom_enabled = bool(tracker_holder and tracker_holder.status.get("auto_zoom"))
+            det = (tracker_holder.last_detection if tracker_holder else None) or {}
+            now = time.time()
+            has_ball = (
+                auto_zoom_enabled
+                and det.get("detected")
+                and (now - float(det.get("timestamp") or 0) < 0.9)
+            )
+
+            if auto_zoom_enabled and has_ball:
+                det_zoom = float(det.get("zoom_factor") or 2.2)
+                target_zoom = max(1.4, min(3.0, det_zoom))
+                fw = float(det.get("frame_width") or w)
+                fh = float(det.get("frame_height") or h)
+                bx = float(det.get("x", fw / 2))
+                by = float(det.get("y", fh / 2))
+                target_cx = max(0.12, min(0.88, bx / fw))
+                target_cy = max(0.12, min(0.88, by / fh))
+            else:
+                target_zoom = float(settings().get("digital_zoom", 1.0))
+                target_cx = 0.5
+                target_cy = 0.5
+
+            # 50% slower gradual easing matching preview.html (ease = 0.07)
+            ease = 0.07
+            zoom_state["current_zoom"] += (target_zoom - zoom_state["current_zoom"]) * ease
+            zoom_state["current_cx"] += (target_cx - zoom_state["current_cx"]) * ease
+            zoom_state["current_cy"] += (target_cy - zoom_state["current_cy"]) * ease
+
+            zoomed = False
+            if zoom_state["current_zoom"] > 1.01:
+                try:
+                    new_w = max(16, int(w / zoom_state["current_zoom"]))
+                    new_h = max(16, int(h / zoom_state["current_zoom"]))
+                    cx = int(zoom_state["current_cx"] * w)
+                    cy = int(zoom_state["current_cy"] * h)
+                    x1 = max(0, min(w - new_w, cx - new_w // 2))
+                    y1 = max(0, min(h - new_h, cy - new_h // 2))
+                    x2 = x1 + new_w
+                    y2 = y1 + new_h
+                    cropped = img[y1:y2, x1:x2]
+                    img = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
+                    zoomed = True
+                except Exception as exc:
+                    log(f"Auto zoom apply warning: {exc}")
+
+            if not settings().get("broadcast_overlay", True):
+                if zoomed:
+                    ok, out = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+                    return out.tobytes() if ok else frame
+                return frame
+
             d = store.get("cricket") or {}
             ui = store.get("ui") or {}
             if not isinstance(d, dict):
@@ -117,6 +182,9 @@ def build_router(store, require_user, current_user, log, root: Path,
             show_bar = ui.get("scorebar", True) is not False
             show_card = ui.get("scorecard", False) is True
             if not show_bar and not show_card:
+                if zoomed:
+                    ok, out = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+                    return out.tobytes() if ok else frame
                 return frame
 
             def team_color(name, fallback):
@@ -139,25 +207,6 @@ def build_router(store, require_user, current_user, log, root: Path,
                     hv = ord(c) + ((hv << 5) - hv)
                 rgb = colorsys.hls_to_rgb((abs(hv) % 360) / 360.0, 0.35, 0.65)
                 return tuple(int(x * 255) for x in rgb[::-1]) if n else fallback
-
-            # Apply digital zoom if configured
-            zoom_factor = settings().get("digital_zoom", 1.0)
-            if zoom_factor != 1.0:
-                try:
-                    h, w = img.shape[:2]
-                    # Calculate zoom crop region centered on frame center
-                    cx, cy = w // 2, h // 2
-                    new_w = int(w / zoom_factor)
-                    new_h = int(h / zoom_factor)
-                    x1 = max(0, cx - new_w // 2)
-                    y1 = max(0, cy - new_h // 2)
-                    x2 = min(w, cx + new_w // 2)
-                    y2 = min(h, cy + new_h // 2)
-                    # Crop and resize back to original size
-                    cropped = img[y1:y2, x1:x2]
-                    img = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
-                except Exception as exc:
-                    log(f"Zoom apply warning: {exc}")
 
             def fit(text, max_chars):
                 text = str(text or "—").strip()
@@ -1362,4 +1411,5 @@ def build_router(store, require_user, current_user, log, root: Path,
 
     r.cleanup = shutdown
     r.get_settings = settings
+    r.broadcast_frame = broadcast_frame
     return r

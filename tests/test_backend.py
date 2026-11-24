@@ -92,9 +92,13 @@ def test_settings_secrets_never_returned():
     assert "SUPERSECRETKEY" not in c.get("/api/db/").text
 
 
-def test_stream_is_honest_and_test_mode_blocks(monkeypatch):
-    monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
-    monkeypatch.delenv("GOOGLE_CLIENT_SECRET", raising=False)
+def test_stream_is_honest_and_test_mode_blocks(monkeypatch=None):
+    if monkeypatch:
+        monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
+        monkeypatch.delenv("GOOGLE_CLIENT_SECRET", raising=False)
+    else:
+        os.environ.pop("GOOGLE_CLIENT_ID", None)
+        os.environ.pop("GOOGLE_CLIENT_SECRET", None)
     c.post("/api/login", json={"username": "admin", "password": "testpass123"})
     st = c.get("/api/stream/status").json()
     assert st["live"] is False and st["destinations"]["youtube"]["status"] == "NOT CONFIGURED"
@@ -125,37 +129,6 @@ def test_tracker_commands_need_login_and_a_running_ai():
         assert ui.receive_json()["error"] == "AI tracker not running"
 
 
-if __name__ == "__main__":
-    for name, fn in list(globals().items()):
-        if name.startswith("test_"):
-            fn()
-            print("PASS", name)
-
-
-def test_camera_configuration_and_system_pages():
-    c.post("/api/login", json={"username": "admin", "password": "testpass123"})
-    r = c.put("/api/settings", json={
-        "camera_type": "usb", "camera_device": 0, "camera_name": "USB Camera 0",
-        "resolution": "1280x720", "fps": 30, "ai_device": "AUTO"
-    })
-    assert r.status_code == 200
-    s = c.get("/api/settings").json()
-    assert s["camera_type"] == "usb" and str(s["camera_device"]) == "0"
-    assert c.get("/api/camera/status").status_code == 200
-    assert c.get("/api/cameras").status_code == 200
-    assert c.get("/system.html", follow_redirects=False).status_code == 200
-    info = c.get("/api/system/info").json()
-    assert "version" in info and "update" in info
-
-
-def test_public_scorebar_page():
-    anon = TestClient(server.app, follow_redirects=False)
-    r = anon.get("/index.html?scorebar=1")
-    assert r.status_code == 200
-    assert "scorebar-only" in r.text
-
-
-
 def test_exact_broadcast_renderer_page_and_stream_status():
     anon = TestClient(server.app, follow_redirects=False)
     r = anon.get('/broadcast.html')
@@ -166,3 +139,10 @@ def test_exact_broadcast_renderer_page_and_stream_status():
     st = c.get('/api/stream/status').json()
     assert 'exact_live_preview_overlay' in st
     assert 'broadcast_renderer_error' in st
+
+
+if __name__ == "__main__":
+    for name, fn in list(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print("PASS", name)

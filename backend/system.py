@@ -212,13 +212,44 @@ class SystemManager:
 
     def restart_application(self):
         self.log("Application restart requested")
-        # Development-friendly restart: terminate current process and let run.py/service supervise it.
-        cmd = [sys.executable] + sys.argv
+        # 1. Cleanly terminate any active child processes (ffmpeg, AI tracker, etc.)
+        try:
+            import psutil
+            current_proc = psutil.Process()
+            children = current_proc.children(recursive=True)
+            for child in children:
+                try:
+                    child.terminate()
+                except Exception:
+                    pass
+            # Allow brief moment for children to release ports and camera devices
+            _, alive = psutil.wait_procs(children, timeout=1.0)
+            for p in alive:
+                try:
+                    p.kill()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # 2. Prepare launcher command pointing directly to run.py
+        run_script = (self.root / "run.py").resolve()
+        target_script = str(run_script) if run_script.exists() else str(Path(sys.argv[0]).resolve())
+        root_dir = str(self.root.resolve())
+
+        # Use sys.argv passing to avoid string escaping and path backslash issues on Windows
+        runner_code = (
+            "import time, subprocess, sys; "
+            "time.sleep(1.2); "
+            "subprocess.Popen([sys.executable, sys.argv[1]], cwd=sys.argv[2])"
+        )
+        cmd = [sys.executable, "-c", runner_code, target_script, root_dir]
+
         if os.name == "nt":
             flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
-            subprocess.Popen(cmd, cwd=str(self.root), creationflags=flags)
+            subprocess.Popen(cmd, cwd=root_dir, creationflags=flags)
         else:
-            subprocess.Popen(cmd, cwd=str(self.root), start_new_session=True)
+            subprocess.Popen(cmd, cwd=root_dir, start_new_session=True)
         os._exit(0)
 
     def factory_reset(self):

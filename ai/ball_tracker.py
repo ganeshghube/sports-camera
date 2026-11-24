@@ -143,6 +143,7 @@ class PanTiltController:
                 for p in ("/dev/ttyUSB0", "/dev/ttyACM0", "/dev/rfcomm0", "/dev/ttyUSB1", "/dev/ttyACM1"):
                     if p not in ports_to_try:
                         ports_to_try.append(p)
+            self.attempted_ports = list(ports_to_try)
             for p in ports_to_try:
                 try:
                     log(f"Connecting to ESP32 {p} @ {baudrate}")
@@ -1011,9 +1012,11 @@ def main():
             state["reload"] = True
         elif cmd == "enable_auto_zoom":
             state["auto_zoom"] = True
+            pub.publish({"type": "status", "auto_zoom": True})
             log("Auto zoom enabled")
         elif cmd == "disable_auto_zoom":
             state["auto_zoom"] = False
+            pub.publish({"type": "status", "auto_zoom": False})
             log("Auto zoom disabled")
 
     pub = Publisher(BACKEND_WS_URL, on_command)

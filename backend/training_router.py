@@ -498,6 +498,12 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
         _record_model_history(best, _state.get("metrics", {}))
         return {"deployed": True, "hot_reloaded": True}
 
+    @router.post("/reload-model")
+    def reload_model(_=auth_dep):
+        """Hot-reload the active AI model into the live ball tracker."""
+        _notify_tracker(camera_control)
+        return {"ok": True, "reloaded": True, "model": str(ROOT / "models" / "best.pt")}
+
     # ── Continuous Auto-Training Endpoints ─────────────────────────────────────
     @router.get("/auto/status")
     def auto_status(_=auth_dep):

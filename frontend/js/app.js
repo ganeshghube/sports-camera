@@ -6,6 +6,7 @@
     ["admin.html?view=scoring", "🏏", "Scoring", "scoring"],
     ["admin.html?view=overlay", "🎬", "Overlay", "overlay"],
     ["preview.html", "📺", "Live Preview", "preview"],
+    ["training.html", "🎯", "AI Training", "training"],
     ["matches.html", "🗂", "Recorded Matches", "matches"],
     ["settings.html", "📷", "Setup Camera / Streaming", "camera-settings"],
     ["system.html", "⚙️", "Settings", "settings"],
@@ -45,6 +46,82 @@
 
   CL.me = () => fetch("/api/me", { credentials: "same-origin" }).then((r) => r.json()).catch(() => null);
   CL.logout = async () => { try { await fetch("/api/logout", { method: "POST", credentials: "same-origin" }); } catch (e) { /* ignore */ } location.href = "/login.html"; };
+
+  /** Automatic application restart with visual modal & smart auto-reconnect polling. */
+  CL.restartApp = async function (opts = {}) {
+    const title = opts.title || "Restarting Cricket Live";
+    const desc = opts.desc || "Rebooting server, camera feed, and AI tracker. Please wait…";
+    const redirect = opts.redirect || window.location.href;
+
+    let overlay = document.getElementById("clRestartOverlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "clRestartOverlay";
+      overlay.className = "cl-restart-overlay";
+      overlay.innerHTML = `
+        <div class="cl-restart-card">
+          <div class="cl-restart-spinner"></div>
+          <div class="cl-restart-title" id="clRestartTitle"></div>
+          <div class="cl-restart-desc" id="clRestartDesc"></div>
+          <div class="cl-restart-bar"><div class="cl-restart-bar-fill"></div></div>
+          <div class="cl-restart-status" id="clRestartStatus">Scheduling restart…</div>
+          <div class="cl-restart-countdown" id="clRestartCountdown">Auto-reconnecting shortly</div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    document.getElementById("clRestartTitle").textContent = title;
+    document.getElementById("clRestartDesc").textContent = desc;
+    overlay.classList.add("show");
+
+    // 1. Send restart command to backend
+    try {
+      await fetch("/api/system/restart", { method: "POST", credentials: "same-origin" });
+      document.getElementById("clRestartStatus").textContent = "Server shutting down cleanly…";
+    } catch (e) {
+      document.getElementById("clRestartStatus").textContent = "Restart in progress…";
+    }
+
+    // 2. Poll /api/system/ping until the new server comes back online
+    let attempts = 0;
+    const maxAttempts = 40;
+    const statusEl = document.getElementById("clRestartStatus");
+    const countEl = document.getElementById("clRestartCountdown");
+
+    // Initial wait for shutdown
+    await new Promise((r) => setTimeout(r, 1600));
+
+    const pollInterval = setInterval(async () => {
+      attempts++;
+      statusEl.textContent = `Waiting for server to start… (Check ${attempts})`;
+      countEl.textContent = "Checking connection…";
+
+      try {
+        const res = await fetch("/api/system/ping?t=" + Date.now(), { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.ok) {
+            clearInterval(pollInterval);
+            statusEl.textContent = "✅ Server online! Reloading page…";
+            statusEl.style.color = "var(--green)";
+            countEl.textContent = "Welcome back!";
+            setTimeout(() => {
+              window.location.href = redirect;
+            }, 600);
+          }
+        }
+      } catch (err) {
+        // Expected while server is down
+      }
+
+      if (attempts >= maxAttempts) {
+        clearInterval(pollInterval);
+        statusEl.textContent = "⚠️ Restart took longer than expected.";
+        countEl.innerHTML = '<button class="btn primary" onclick="location.reload()">Manual Reload</button>';
+      }
+    }, 850);
+  };
 
   CL.guard = async function () {
     const me = await CL.me();

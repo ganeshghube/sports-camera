@@ -574,6 +574,12 @@ async def ws_tracker_ui(ws: WebSocket):
                 if not store.session_user(ws.cookies.get(COOKIE)):
                     await ws.send_json({"type": "error", "error": "Not authenticated"})
                     continue
+                if cmd == "enable_auto_zoom":
+                    tr.status["auto_zoom"] = True
+                    await _broadcast({"type": "status", "auto_zoom": True})
+                elif cmd == "disable_auto_zoom":
+                    tr.status["auto_zoom"] = False
+                    await _broadcast({"type": "status", "auto_zoom": False})
                 if tr.tracker is None:
                     await ws.send_json({"type": "error", "error": "AI tracker not running"})
                     continue
@@ -641,6 +647,12 @@ async def system_update_install(request: Request, user=Depends(require_user)):
     return result
 
 
+@app.get("/api/system/ping")
+def system_ping():
+    """Unauthenticated health ping used by the frontend to detect restart completion."""
+    return {"ok": True, "time": time.time(), "version": system_manager.current_version()}
+
+
 @app.post("/api/system/restart")
 def system_restart(user=Depends(require_user)):
     # Return the acknowledgement before the supervisor restarts the process.
@@ -671,7 +683,7 @@ try:
 except ImportError:  # started as `python backend/server.py`
     import streaming  # noqa: E402
 
-stream_router = streaming.build_router(store, require_user, current_user, log, ROOT, camera_status_getter=_camera_status, camera_control=_send_tracker_command, frame_getter=_frame_getter, camera_discover=_discover_cameras)
+stream_router = streaming.build_router(store, require_user, current_user, log, ROOT, camera_status_getter=_camera_status, camera_control=_send_tracker_command, frame_getter=_frame_getter, camera_discover=_discover_cameras, tracker_holder=tr)
 app.include_router(stream_router)
 
 try:
@@ -695,7 +707,10 @@ async def page_gate(request: Request, call_next):
     if p.endswith(".html") and p not in PUBLIC_PAGES:
         if not store.session_user(request.cookies.get(COOKIE)):
             return RedirectResponse("/login.html?next=" + p)
-    return await call_next(request)
+    response = await call_next(request)
+    if p.endswith(".js") or p.endswith(".css"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
 
 
 # ------------------------------------------------------------------ static

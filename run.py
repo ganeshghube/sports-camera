@@ -168,9 +168,21 @@ def main():
     signal.signal(signal.SIGINT, stop_tracker)
     signal.signal(signal.SIGTERM, stop_tracker)
     print("[launcher] Cricket Live server + AI tracker starting...", flush=True)
+    server_host = os.environ.get("HOST", "0.0.0.0")
+    server_port = int(os.environ.get("PORT", "8000"))
     try:
-        uvicorn.run(app, host=os.environ.get("HOST", "0.0.0.0"), port=int(os.environ.get("PORT", "8000")),
-                    log_level="warning")
+        # Retry binding if port is briefly held by previous instance during a rapid restart
+        for attempt in range(6):
+            try:
+                uvicorn.run(app, host=server_host, port=server_port, log_level="warning")
+                break
+            except OSError as exc:
+                err_msg = str(exc).lower()
+                if attempt < 5 and ("10048" in err_msg or "98" in err_msg or "already in use" in err_msg or "address" in err_msg):
+                    print(f"[launcher] Port {server_port} is busy, waiting for release (retry {attempt + 1}/5)...", flush=True)
+                    time.sleep(1.0)
+                else:
+                    raise
     finally:
         stop_tracker()
 

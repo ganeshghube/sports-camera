@@ -4,7 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Live Preview — Cricket Live</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Barlow+Condensed:wght@700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=2.9.3">
 <style>
 .preview-stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;min-height:300px;box-shadow:0 12px 30px rgba(0,0,0,.2)}
 .preview-viewport{position:absolute;inset:0;width:100%;height:100%;transform-origin:50% 50%;will-change:transform}
@@ -57,8 +57,10 @@
   <div class="row" style="margin-top:10px">
    <button class="btn" id="pauseBtn" disabled>⏸ Pause Recording</button>
    <button class="btn" id="overlayBtn">👁 Score Overlay</button>
+   <button class="btn" id="restartCamBtn" title="Reset camera capture without leaving this page">🔄 Reset Camera</button>
    <span class="hint" id="message">Ready</span>
    <span class="grow"></span>
+   <a class="btn" href="training.html">🎯 AI Training</a>
    <a class="btn" href="settings.html">⚙ Setup Camera / Streaming</a>
   </div>
  </div>
@@ -90,7 +92,7 @@
  </div></div>
 </section>
 </div>
-<script src="js/app.js"></script>
+<script src="js/app.js?v=2.9.3"></script>
 <script>
 (async()=>{
   await CL.shell("preview.html","Live Preview");
@@ -109,7 +111,7 @@
   }
 
   function updateZoom(){
-    const hasBall = detection && lastFrameW && lastFrameH && (Date.now()-lastDetectionAt < 650);
+    const hasBall = detection && lastFrameW && lastFrameH && (Date.now()-lastDetectionAt < 900);
     if(autoZoom && hasBall){
       const zFactor = detection.zoom_factor ? Math.max(1.4, Math.min(3.0, Number(detection.zoom_factor))) : 2.2;
       targetZoom = zFactor;
@@ -135,7 +137,8 @@
       }
     }
 
-    const ease = 0.14;
+    // 50% slower easing (0.07 vs original 0.14) for cinematic, gradual zoom transitions
+    const ease = 0.07;
     currentZoom += (targetZoom - currentZoom) * ease;
     currentOriginX += (targetOriginX - currentOriginX) * ease;
     currentOriginY += (targetOriginY - currentOriginY) * ease;
@@ -239,6 +242,15 @@
     try{
       if(camera){await CL.api("/api/camera/stop",{method:"POST"});show("Camera stopping…")} else {await CL.api("/api/camera/start",{method:"POST"});show("Camera starting…")}
     }catch(e){show(e.message,true)}
+  };
+
+  $("restartCamBtn").onclick=async()=>{
+    try{
+      show("Restarting camera feed…");
+      await CL.api("/api/camera/restart",{method:"POST"});
+      CL.toast("Camera feed restarted!");
+      show("Camera feed restarted successfully");
+    }catch(e){show("Camera restart failed: "+e.message,true)}
   };
 
   $("trackingBtn").onclick=()=>{
