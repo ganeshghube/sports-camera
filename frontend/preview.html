@@ -4,7 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Live Preview — Cricket Live</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Barlow+Condensed:wght@700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=2.9.3">
+<link rel="stylesheet" href="css/app.css?v=2.9.5">
 <style>
 .preview-stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;min-height:300px;box-shadow:0 12px 30px rgba(0,0,0,.2)}
 .preview-viewport{position:absolute;inset:0;width:100%;height:100%;transform-origin:50% 50%;will-change:transform}
@@ -92,7 +92,7 @@
  </div></div>
 </section>
 </div>
-<script src="js/app.js?v=2.9.3"></script>
+<script src="js/app.js?v=2.9.4"></script>
 <script>
 (async()=>{
   await CL.shell("preview.html","Live Preview");
@@ -102,6 +102,7 @@
   let currentZoom=1.0, targetZoom=1.0;
   let currentOriginX=50, currentOriginY=50, targetOriginX=50, targetOriginY=50;
   let detection=null, lastFrameW=0, lastFrameH=0, lastDetectionAt=0;
+  let lastZoomTime=performance.now();
   const tc=$("trackCanvas"), tctx=tc.getContext("2d");
 
   function setAutoZoomUI(on){
@@ -111,14 +112,22 @@
   }
 
   function updateZoom(){
-    const hasBall = detection && lastFrameW && lastFrameH && (Date.now()-lastDetectionAt < 900);
+    const now = performance.now();
+    const dt = Math.max(0.001, Math.min((now - lastZoomTime) / 1000, 0.1));
+    lastZoomTime = now;
+
+    const hasBall = detection && lastFrameW && lastFrameH && (Date.now()-lastDetectionAt < 1400);
     if(autoZoom && hasBall){
       const zFactor = detection.zoom_factor ? Math.max(1.4, Math.min(3.0, Number(detection.zoom_factor))) : 2.2;
       targetZoom = zFactor;
-      const normX = detection.x / lastFrameW;
-      const normY = detection.y / lastFrameH;
-      targetOriginX = Math.max(12, Math.min(88, normX * 100));
-      targetOriginY = Math.max(12, Math.min(88, normY * 100));
+      const normX = (detection.x / lastFrameW) * 100;
+      const normY = (detection.y / lastFrameH) * 100;
+      const clampedX = Math.max(12, Math.min(88, normX));
+      const clampedY = Math.max(12, Math.min(88, normY));
+      // Deadband: ignore tiny ball jitter < 2% to avoid rapid micro-panning
+      if(Math.abs(clampedX - targetOriginX) > 2.0) targetOriginX = clampedX;
+      if(Math.abs(clampedY - targetOriginY) > 2.0) targetOriginY = clampedY;
+
       $("zoomHud").textContent = `ZOOM: ${currentZoom.toFixed(1)}x • TRACKING`;
       $("zoomHud").className = "hud-pill good";
       $("zoomStatus").textContent = `ON (${currentZoom.toFixed(1)}x)`;
@@ -137,11 +146,26 @@
       }
     }
 
-    // 50% slower easing (0.07 vs original 0.14) for cinematic, gradual zoom transitions
-    const ease = 0.07;
-    currentZoom += (targetZoom - currentZoom) * ease;
-    currentOriginX += (targetOriginX - currentOriginX) * ease;
-    currentOriginY += (targetOriginY - currentOriginY) * ease;
+    // Slew-rate limited cinematic zoom:
+    // maxZoomRate: 0.25 zoom factor units per second (takes ~4.8s to go from 1.0x to 2.2x)
+    // maxPanRate: 14% origin shift per second
+    const maxZoomRate = 0.25;
+    const maxPanRate = 14.0;
+    const ease = 0.035;
+
+    const maxZoomStep = maxZoomRate * dt;
+    const zoomDiff = targetZoom - currentZoom;
+    const zoomStep = Math.sign(zoomDiff) * Math.min(Math.abs(zoomDiff) * (ease * 60 * dt), maxZoomStep);
+    currentZoom += zoomStep;
+
+    const maxPanStep = maxPanRate * dt;
+    const panDiffX = targetOriginX - currentOriginX;
+    const panStepX = Math.sign(panDiffX) * Math.min(Math.abs(panDiffX) * (ease * 60 * dt), maxPanStep);
+    currentOriginX += panStepX;
+
+    const panDiffY = targetOriginY - currentOriginY;
+    const panStepY = Math.sign(panDiffY) * Math.min(Math.abs(panDiffY) * (ease * 60 * dt), maxPanStep);
+    currentOriginY += panStepY;
 
     const vp = $("previewViewport");
     if(vp){
@@ -166,7 +190,7 @@
     onStatus:m=>{
       camera=!!m.camera_running;
       if(m.frame_width){lastFrameW=m.frame_width;lastFrameH=m.frame_height||lastFrameH;}
-      if(m.detected) detection=m, lastDetectionAt=Date.now(); else if(Date.now()-lastDetectionAt>500) detection=null;
+      if(m.detected) detection=m, lastDetectionAt=Date.now(); else if(Date.now()-lastDetectionAt>1400) detection=null;
       drawTracking();
       tracking=!!m.tracking;
       setCameraUI(m); setTrackingUI(m);
@@ -192,7 +216,7 @@
       drawTracking();
     },
     onZoom:m=>{
-      if(m.zoom_factor && detection){
+      if(m.zoom_factor && m.ball_x !== null && detection){
         detection.zoom_factor = m.zoom_factor;
       }
     },

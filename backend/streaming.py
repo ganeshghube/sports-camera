@@ -60,6 +60,7 @@ def build_router(store, require_user, current_user, log, root: Path,
         "current_cy": 0.5,
         "target_cx": 0.5,
         "target_cy": 0.5,
+        "last_time": time.time(),
     }
 
     # One place for image/video preview frames. The AI worker owns the actual
@@ -127,7 +128,7 @@ def build_router(store, require_user, current_user, log, root: Path,
             has_ball = (
                 auto_zoom_enabled
                 and det.get("detected")
-                and (now - float(det.get("timestamp") or 0) < 0.9)
+                and (now - float(det.get("timestamp") or 0) < 1.4)
             )
 
             if auto_zoom_enabled and has_ball:
@@ -144,11 +145,23 @@ def build_router(store, require_user, current_user, log, root: Path,
                 target_cx = 0.5
                 target_cy = 0.5
 
-            # 50% slower gradual easing matching preview.html (ease = 0.07)
-            ease = 0.07
-            zoom_state["current_zoom"] += (target_zoom - zoom_state["current_zoom"]) * ease
-            zoom_state["current_cx"] += (target_cx - zoom_state["current_cx"]) * ease
-            zoom_state["current_cy"] += (target_cy - zoom_state["current_cy"]) * ease
+            # Slew-rate limited cinematic zoom matching preview.html & broadcast.html
+            dt = max(0.001, min(now - float(zoom_state.get("last_time", now) or now), 0.1))
+            zoom_state["last_time"] = now
+
+            max_zoom_step = 0.25 * dt
+            zoom_diff = target_zoom - zoom_state["current_zoom"]
+            zoom_step = (1.0 if zoom_diff >= 0 else -1.0) * min(abs(zoom_diff) * (0.035 * 60 * dt), max_zoom_step)
+            zoom_state["current_zoom"] += zoom_step
+
+            max_pan_step = 0.14 * dt
+            cx_diff = target_cx - zoom_state["current_cx"]
+            cx_step = (1.0 if cx_diff >= 0 else -1.0) * min(abs(cx_diff) * (0.035 * 60 * dt), max_pan_step)
+            zoom_state["current_cx"] += cx_step
+
+            cy_diff = target_cy - zoom_state["current_cy"]
+            cy_step = (1.0 if cy_diff >= 0 else -1.0) * min(abs(cy_diff) * (0.035 * 60 * dt), max_pan_step)
+            zoom_state["current_cy"] += cy_step
 
             zoomed = False
             if zoom_state["current_zoom"] > 1.01:

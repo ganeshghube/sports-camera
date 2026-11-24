@@ -96,9 +96,10 @@ def test_frontend_nav_and_zoom():
     assert '["training.html", "🎯", "AI Training", "training"]' in app_js, "training.html not registered as AI Training in app.js NAV"
     assert "CL.restartApp" in app_js, "CL.restartApp missing in app.js"
     
-    # Check 50% slower zoom in preview.html
-    assert "const ease = 0.07;" in preview_html, "preview.html ease not set to 0.07"
-    assert "lastDetectionAt < 900" in preview_html, "preview.html hold duration not set to 900ms"
+    # Check slow zoom in preview.html (ease = 0.035, maxZoomRate = 0.25, dt slew rate)
+    assert "const ease = 0.035;" in preview_html, "preview.html ease not set to 0.035"
+    assert "const maxZoomRate = 0.25;" in preview_html, "preview.html maxZoomRate not set to 0.25"
+    assert "lastDetectionAt < 1400" in preview_html, "preview.html hold duration not set to 1400ms"
     assert "restartCamBtn" in preview_html, "restartCamBtn missing in preview.html"
     
     # Check system.html buttons
@@ -134,7 +135,9 @@ def test_broadcast_auto_zoom():
     broadcast_html = (ROOT / "frontend" / "broadcast.html").read_text(encoding="utf-8")
     assert "broadcast-viewport" in broadcast_html, "broadcast-viewport missing in broadcast.html"
     assert "ws/ball-tracking-ui" in broadcast_html, "WebSocket listener missing in broadcast.html"
-    assert "ease = 0.07" in broadcast_html, "ease = 0.07 missing in broadcast.html"
+    assert "ease = 0.035" in broadcast_html, "ease = 0.035 missing in broadcast.html"
+    assert "maxZoomRate = 0.25" in broadcast_html, "maxZoomRate = 0.25 missing in broadcast.html"
+    assert "lastDetectionAt < 1400" in broadcast_html, "lastDetectionAt < 1400 missing in broadcast.html"
     assert "targetZoom" in broadcast_html, "targetZoom logic missing in broadcast.html"
     assert "index.html?overlay=1" in broadcast_html, "scoreOverlay missing in broadcast.html"
 
