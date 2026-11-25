@@ -21,6 +21,14 @@ pip_install() {
   python -m pip install --no-cache-dir "$@"
 }
 
+pip_install_nobi() {
+  python -m pip install --no-cache-dir --no-build-isolation "$@"
+}
+
+pip_install_smart() {
+  pip_install "$@" || pip_install_nobi "$@"
+}
+
 # 1. Check if running inside Termux or Android
 IS_TERMUX=0
 if [ -d "/data/data/com.termux" ] || [ -n "${TERMUX_VERSION:-}" ] || [ -n "${ANDROID_ROOT:-}" ]; then
@@ -44,12 +52,14 @@ if command -v pkg >/dev/null 2>&1; then
   # Core runtime tools, FFmpeg, QR generator, and native build toolchain
   pkg install -y \
     python python-pip ffmpeg git qrencode termux-tools iproute2 curl wget \
-    clang make cmake ninja pkg-config binutils rust patchelf ndk-sysroot \
+    clang make cmake ninja pkg-config binutils rust maturin cython patchelf ndk-sysroot \
     libjpeg-turbo libpng libwebp libtiff freetype littlecms openblas \
     libxml2 libxslt zlib openssl libffi || true
 
   # Prebuilt Termux Python packages avoid fragile source builds on Bionic libc
   for pkg_name in \
+    python-setuptools \
+    python-wheel \
     python-numpy \
     opencv-python \
     python-opencv \
@@ -62,7 +72,9 @@ if command -v pkg >/dev/null 2>&1; then
     python-cryptography \
     python-yaml \
     python-lxml \
-    python-pydantic-core; do
+    python-pydantic-core \
+    python-pydantic \
+    python-fastapi; do
     pkg install -y "$pkg_name" >/dev/null 2>&1 || true
   done
 elif command -v apt-get >/dev/null 2>&1; then
@@ -80,6 +92,10 @@ if [ "$IS_TERMUX" -eq 1 ]; then
   export MATHLIB="m"
   export LDFLAGS="${LDFLAGS:-} -lm"
   export CFLAGS="${CFLAGS:-} -Wno-incompatible-function-pointer-types"
+  if command -v rustc >/dev/null 2>&1; then
+    RUST_HOST="$(rustc -vV 2>/dev/null | awk '/host:/ {print $2}' || true)"
+    [ -n "$RUST_HOST" ] && export CARGO_BUILD_TARGET="${CARGO_BUILD_TARGET:-$RUST_HOST}"
+  fi
 fi
 
 if ! python -m pip --version >/dev/null 2>&1; then
@@ -89,28 +105,46 @@ pip_install --upgrade pip setuptools wheel || true
 
 # 4. Install Python dependencies (using requirements-android.txt with Termux fallbacks)
 echo "📥 Step 3/5: Installing Cricket Live Android dependencies..."
-if [ -f "requirements-android.txt" ] && pip_install -r requirements-android.txt; then
+if [ -f "requirements-android.txt" ] && (pip_install -r requirements-android.txt || pip_install_nobi -r requirements-android.txt); then
   echo "✅ Installed all packages from requirements-android.txt"
 else
   echo "⚠️  Full requirements-android.txt pip install hit a native build issue; installing with Termux fallbacks..."
 
+  # Install pydantic / fastapi safely without letting pip rebuild maturin from source
+  if ! py_has pydantic_core; then
+    pip_install_nobi maturin >/dev/null 2>&1 || true
+    pip_install_nobi pydantic-core || pip_install_nobi "pydantic-core<2.30" || true
+  fi
+  if ! py_has fastapi; then
+    if ! pip_install_smart fastapi; then
+      if py_has pydantic_core && py_has pydantic; then
+        echo "ℹ️  Installing fastapi (--no-deps) with Termux prebuilt pydantic..."
+        pip_install starlette typing-extensions annotated-types anyio idna sniffio
+        pip_install --no-deps fastapi
+      else
+        echo "❌ Failed to install fastapi/pydantic."
+        exit 1
+      fi
+    fi
+  fi
+
   # Core web/backend dependencies
-  pip_install fastapi httpx python-dotenv "websocket-client>=1.8,<2" pyserial
-  pip_install "uvicorn[standard]" || pip_install uvicorn websockets
-  py_has psutil || pip_install "psutil>=5.9"
+  pip_install_smart httpx python-dotenv "websocket-client>=1.8,<2" pyserial
+  pip_install_smart "uvicorn[standard]" || pip_install_smart uvicorn websockets
+  py_has psutil || pip_install_smart "psutil>=5.9"
 
   # Numerical & vision dependencies (prefer Termux prebuilt packages if present)
-  py_has numpy || pip_install numpy
+  py_has numpy || pip_install_smart numpy
   if ! py_has cv2; then
-    pip_install opencv-python || pip_install opencv-python-headless
+    pip_install_smart opencv-python || pip_install_smart opencv-python-headless
   fi
 
   # Ultralytics YOLO + its dependencies (avoid recompiling Termux-prebuilt torch/cv2)
-  py_has PIL || pip_install pillow || true
-  py_has yaml || pip_install pyyaml || true
-  pip_install requests tqdm py-cpuinfo ultralytics-thop || true
+  py_has PIL || pip_install_smart pillow || true
+  py_has yaml || pip_install_smart pyyaml || true
+  pip_install_smart requests tqdm py-cpuinfo ultralytics-thop || true
   if ! py_has ultralytics; then
-    if ! pip_install ultralytics; then
+    if ! pip_install_smart ultralytics; then
       if py_has torch && py_has cv2 && py_has numpy; then
         echo "ℹ️  Installing ultralytics (--no-deps) using Termux prebuilt torch/cv2/numpy..."
         pip_install --no-deps ultralytics
