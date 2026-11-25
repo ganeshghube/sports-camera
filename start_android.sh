@@ -12,11 +12,32 @@ export PORT="${PORT:-8000}"
 
 # 0. Automatic First-Time Install & Deploy Check
 # If packages, ffmpeg, or .env are missing, run setup_android.sh automatically
-if [ ! -f ".env" ] || ! python -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
+USE_PROOT=0
+if command -v proot-distro >/dev/null 2>&1 && [ -d "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/ubuntu" ] && [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
+  USE_PROOT=1
+fi
+
+if [ ! -f ".env" ]; then
+  echo "===================================================================="
+  echo "🚀 First-time run detected (.env missing)! Auto-installing..."
+  echo "===================================================================="
+  bash tools/setup_android.sh
+elif [ "$USE_PROOT" -eq 1 ]; then
+  if ! proot-distro login ubuntu --shared-tmp --bind "${ROOT_DIR}:${ROOT_DIR}" -- "${ROOT_DIR}/.venv-android/bin/python" -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1; then
+    echo "===================================================================="
+    echo "🚀 Missing dependencies detected! Auto-installing..."
+    echo "===================================================================="
+    bash tools/setup_android.sh
+  fi
+elif ! python -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
   echo "===================================================================="
   echo "🚀 First-time run or missing dependencies detected! Auto-installing..."
   echo "===================================================================="
   bash tools/setup_android.sh
+fi
+
+if command -v proot-distro >/dev/null 2>&1 && [ -d "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/ubuntu" ] && [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
+  USE_PROOT=1
 fi
 
 # Keep Termux CPU awake while running live match server & AI tracker
@@ -98,4 +119,8 @@ if command -v termux-open-url >/dev/null 2>&1; then
   (sleep 2.5 && termux-open-url "http://127.0.0.1:${PORT}/preview.html") &
 fi
 
-exec python run.py
+if [ "$USE_PROOT" -eq 1 ]; then
+  exec proot-distro login ubuntu --shared-tmp --bind "${ROOT_DIR}:${ROOT_DIR}" -- bash -c "cd '${ROOT_DIR}' && export HOST='${HOST}' PORT='${PORT}' TERMUX_VERSION='proot' && exec '${ROOT_DIR}/.venv-android/bin/python' run.py"
+else
+  exec python run.py
+fi

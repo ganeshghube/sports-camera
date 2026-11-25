@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Cricket Live — One-Command Automated Setup for Android (Termux)
+# Uses proot-distro (Ubuntu ARM64) inside Termux so all Python AI/CV packages
+# install as prebuilt manylinux aarch64 wheels with zero source compilation.
 # ==============================================================================
 set -euo pipefail
 
@@ -13,168 +15,66 @@ echo "🏏 Cricket Live — Android (Termux ARM64) Setup"
 echo "===================================================================="
 echo
 
-py_has() {
-  python -c "import $1" >/dev/null 2>&1
-}
-
-pip_install() {
-  python -m pip install --no-cache-dir "$@"
-}
-
-pip_install_nobi() {
-  python -m pip install --no-cache-dir --no-build-isolation "$@"
-}
-
-pip_install_smart() {
-  pip_install "$@" || pip_install_nobi "$@"
-}
-
-# 1. Check if running inside Termux or Android
 IS_TERMUX=0
 if [ -d "/data/data/com.termux" ] || [ -n "${TERMUX_VERSION:-}" ] || [ -n "${ANDROID_ROOT:-}" ]; then
   IS_TERMUX=1
-else
-  echo "⚠️  Note: This script is optimized for Android Termux."
-  echo "    Continuing installation for Linux/ARM64..."
 fi
 
-# 2. Update Termux repositories and install system + prebuilt Python packages
-echo "📦 Step 1/5: Installing required system & prebuilt ARM64 packages..."
-if command -v pkg >/dev/null 2>&1; then
+if [ "$IS_TERMUX" -eq 1 ] && command -v pkg >/dev/null 2>&1; then
+  # --------------------------------------------------------------------------
+  # Termux Path: Install proot-distro + Ubuntu ARM64 for prebuilt PyPI wheels
+  # --------------------------------------------------------------------------
+  echo "📦 Step 1/5: Installing Termux host tools (proot-distro, qrencode)..."
   export DEBIAN_FRONTEND=noninteractive
   pkg update -y || true
   pkg upgrade -y -o Dpkg::Options::="--force-confold" || true
+  pkg install -y proot-distro qrencode termux-tools iproute2
 
-  # Enable Termux extra repos that provide prebuilt OpenCV, PyTorch, SciPy, etc.
-  pkg install -y x11-repo >/dev/null 2>&1 || true
-  pkg install -y tur-repo >/dev/null 2>&1 || true
-  pkg update -y || true
-
-  # Install each package individually so one missing name on a mirror never
-  # cancels the rest (apt/pkg aborts the whole command if any single name fails).
-  pkg_try() {
-    for pkg_name in "$@"; do
-      echo "  • pkg install $pkg_name"
-      pkg install -y "$pkg_name" >/dev/null 2>&1 || true
-    done
-  }
-
-  # Core runtime tools, FFmpeg, QR generator, and native build toolchain
-  pkg_try \
-    python python-pip ffmpeg git qrencode termux-tools iproute2 curl wget \
-    clang make cmake ninja pkg-config binutils rust patchelf \
-    maturin python-maturin cython python-cython \
-    libjpeg-turbo libpng libwebp libtiff freetype littlecms openblas \
-    libxml2 libxslt zlib openssl libffi
-
-  # Prebuilt Termux Python packages avoid fragile source builds on Bionic libc
-  pkg_try \
-    python-setuptools \
-    python-wheel \
-    python-numpy \
-    opencv-python \
-    python-opencv \
-    python-pillow \
-    python-torch \
-    python-torchvision \
-    python-scipy \
-    python-matplotlib \
-    python-psutil \
-    python-cryptography \
-    python-yaml \
-    python-lxml \
-    python-pydantic-core \
-    python-pydantic \
-    python-fastapi
-elif command -v apt-get >/dev/null 2>&1; then
-  sudo apt-get update -y || true
-  sudo apt-get install -y \
-    python3 python3-pip python3-dev python3-venv \
-    ffmpeg libjpeg-dev zlib1g-dev libgl1 libglib2.0-0 \
-    libopenblas-dev build-essential git qrencode
-fi
-
-# 3. Prepare Python & native build environment variables for Termux
-echo "🐍 Step 2/5: Preparing Python environment..."
-if [ "$IS_TERMUX" -eq 1 ]; then
-  export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-24}"
-  export MATHLIB="m"
-  export LDFLAGS="${LDFLAGS:-} -lm"
-  export CFLAGS="${CFLAGS:-} -Wno-incompatible-function-pointer-types"
-  if command -v rustc >/dev/null 2>&1; then
-    RUST_HOST="$(rustc -vV 2>/dev/null | awk '/host:/ {print $2}' || true)"
-    [ -n "$RUST_HOST" ] && export CARGO_BUILD_TARGET="${CARGO_BUILD_TARGET:-$RUST_HOST}"
+  echo "🐧 Step 2/5: Setting up Ubuntu ARM64 runtime inside Termux..."
+  if [ ! -d "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/ubuntu" ]; then
+    proot-distro install ubuntu
+  else
+    echo "   Ubuntu rootfs already installed."
   fi
+
+  echo "📥 Step 3/5: Installing Python, FFmpeg & Cricket Live dependencies (prebuilt ARM64 wheels)..."
+  proot-distro login ubuntu --shared-tmp --bind "${ROOT_DIR}:${ROOT_DIR}" -- bash -e <<EOF
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y python3 python3-pip python3-venv ffmpeg libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libgomp1 git
+
+cd "${ROOT_DIR}"
+if [ ! -d ".venv-android" ]; then
+  python3 -m venv .venv-android
 fi
 
-if ! python -m pip --version >/dev/null 2>&1; then
-  python -m ensurepip --upgrade || true
-fi
-pip_install --upgrade pip setuptools wheel || true
+.venv-android/bin/python -m pip install --upgrade pip setuptools wheel
+.venv-android/bin/python -m pip install -r requirements-android.txt
 
-# 4. Install Python dependencies (using requirements-android.txt with Termux fallbacks)
-echo "📥 Step 3/5: Installing Cricket Live Android dependencies..."
-if [ -f "requirements-android.txt" ] && (pip_install -r requirements-android.txt || pip_install_nobi -r requirements-android.txt); then
-  echo "✅ Installed all packages from requirements-android.txt"
+echo "🔍 Verifying installed Python modules & binaries..."
+.venv-android/bin/python -c "import fastapi, uvicorn, websockets, httpx, dotenv, psutil, websocket, cv2, numpy, torch, ultralytics, serial; print('✅ All Python dependencies verified!')"
+command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1 && echo "✅ FFmpeg & FFprobe verified!"
+EOF
+
 else
-  echo "⚠️  Full requirements-android.txt pip install hit a native build issue; installing with Termux fallbacks..."
-
-  # Install pydantic / fastapi safely without letting pip fail on maturin build isolation
-  if ! py_has pydantic_core; then
-    if ! python -c "import maturin" >/dev/null 2>&1; then
-      pip_install_smart maturin || true
-    fi
-    pip_install_nobi pydantic-core || pip_install_nobi "pydantic-core<2.30" || true
-  fi
-  if ! py_has fastapi; then
-    if ! pip_install_smart fastapi; then
-      if py_has pydantic_core && py_has pydantic; then
-        echo "ℹ️  Installing fastapi (--no-deps) with Termux prebuilt pydantic..."
-        pip_install starlette typing-extensions annotated-types anyio idna sniffio
-        pip_install --no-deps fastapi
-      else
-        echo "ℹ️  Falling back to pure-Python Pydantic v1 + FastAPI (<0.100)..."
-        pip_install_smart "pydantic<2" "fastapi<0.100"
-      fi
-    fi
+  # --------------------------------------------------------------------------
+  # Generic Linux/ARM64 fallback
+  # --------------------------------------------------------------------------
+  echo "📦 Step 1/5: Installing system packages..."
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update -y || true
+    sudo apt-get install -y python3 python3-pip python3-dev python3-venv ffmpeg libjpeg-dev zlib1g-dev libgl1 libglib2.0-0 git qrencode
   fi
 
-  # Core web/backend dependencies
-  pip_install_smart httpx python-dotenv "websocket-client>=1.8,<2" pyserial
-  pip_install_smart "uvicorn[standard]" || pip_install_smart uvicorn websockets
-  py_has psutil || pip_install_smart "psutil>=5.9"
-
-  # Numerical & vision dependencies (prefer Termux prebuilt packages if present)
-  py_has numpy || pip_install_smart numpy
-  if ! py_has cv2; then
-    pip_install_smart opencv-python || pip_install_smart opencv-python-headless
-  fi
-
-  # Ultralytics YOLO + its dependencies (avoid recompiling Termux-prebuilt torch/cv2)
-  py_has PIL || pip_install_smart pillow || true
-  py_has yaml || pip_install_smart pyyaml || true
-  pip_install_smart requests tqdm py-cpuinfo ultralytics-thop || true
-  if ! py_has ultralytics; then
-    if ! pip_install_smart ultralytics; then
-      if py_has torch && py_has cv2 && py_has numpy; then
-        echo "ℹ️  Installing ultralytics (--no-deps) using Termux prebuilt torch/cv2/numpy..."
-        pip_install --no-deps ultralytics
-      else
-        echo "❌ Failed to install ultralytics and its native dependencies."
-        exit 1
-      fi
-    fi
-  fi
+  echo "📥 Step 2-3/5: Installing Cricket Live Android dependencies..."
+  python3 -m pip install --upgrade pip setuptools wheel
+  python3 -m pip install -r requirements-android.txt
 fi
 
-# Ensure WebSocket support for Uvicorn is present
-py_has websockets || pip_install websockets || true
-
-# 5. Create default Android .env if not exists
+# 4. Create default Android .env if not exists
 echo "⚙️  Step 4/5: Configuring Android environment settings..."
 if [ ! -f ".env" ]; then
   cp .env.example .env 2>/dev/null || touch .env
-  # Set Android specific defaults
   grep -q "camera_type=" .env 2>/dev/null && sed -i 's/^camera_type=.*/camera_type=android/' .env || echo "camera_type=android" >> .env
   grep -q "RTSP_URL=" .env 2>/dev/null && sed -i 's|^RTSP_URL=.*|RTSP_URL=http://127.0.0.1:8080/video|' .env || echo "RTSP_URL=http://127.0.0.1:8080/video" >> .env
   grep -q "DEVICE=" .env 2>/dev/null && sed -i 's/^DEVICE=.*/DEVICE=CPU/' .env || echo "DEVICE=CPU" >> .env
@@ -182,29 +82,9 @@ if [ ! -f ".env" ]; then
   echo "Created .env with Android phone camera defaults (http://127.0.0.1:8080/video)."
 fi
 
-# Make startup script executable
 chmod +x start_android.sh 2>/dev/null || true
 
-# 6. Verify all required Python modules and system tools
-echo "🔍 Step 5/5: Verifying installation..."
-MISSING_ITEMS=()
-for mod in fastapi uvicorn websockets httpx dotenv psutil websocket cv2 numpy ultralytics serial; do
-  if ! py_has "$mod"; then
-    MISSING_ITEMS+=("python:$mod")
-  fi
-done
-for bin_name in ffmpeg ffprobe qrencode; do
-  if ! command -v "$bin_name" >/dev/null 2>&1; then
-    MISSING_ITEMS+=("bin:$bin_name")
-  fi
-done
-
-if [ "${#MISSING_ITEMS[@]}" -gt 0 ]; then
-  echo "❌ Missing dependencies after setup: ${MISSING_ITEMS[*]}"
-  echo "   Please check the errors above and re-run: bash tools/setup_android.sh"
-  exit 1
-fi
-
+echo "🔍 Step 5/5: Finalizing setup..."
 echo
 echo "===================================================================="
 echo "✅ Setup Complete! Cricket Live is ready on Android."
