@@ -46,18 +46,29 @@ if command -v pkg >/dev/null 2>&1; then
   pkg upgrade -y -o Dpkg::Options::="--force-confold" || true
 
   # Enable Termux extra repos that provide prebuilt OpenCV, PyTorch, SciPy, etc.
-  pkg install -y x11-repo tur-repo >/dev/null 2>&1 || true
+  pkg install -y x11-repo >/dev/null 2>&1 || true
+  pkg install -y tur-repo >/dev/null 2>&1 || true
   pkg update -y || true
 
+  # Install each package individually so one missing name on a mirror never
+  # cancels the rest (apt/pkg aborts the whole command if any single name fails).
+  pkg_try() {
+    for pkg_name in "$@"; do
+      echo "  • pkg install $pkg_name"
+      pkg install -y "$pkg_name" >/dev/null 2>&1 || true
+    done
+  }
+
   # Core runtime tools, FFmpeg, QR generator, and native build toolchain
-  pkg install -y \
+  pkg_try \
     python python-pip ffmpeg git qrencode termux-tools iproute2 curl wget \
-    clang make cmake ninja pkg-config binutils rust maturin cython patchelf ndk-sysroot \
+    clang make cmake ninja pkg-config binutils rust patchelf \
+    maturin python-maturin cython python-cython \
     libjpeg-turbo libpng libwebp libtiff freetype littlecms openblas \
-    libxml2 libxslt zlib openssl libffi || true
+    libxml2 libxslt zlib openssl libffi
 
   # Prebuilt Termux Python packages avoid fragile source builds on Bionic libc
-  for pkg_name in \
+  pkg_try \
     python-setuptools \
     python-wheel \
     python-numpy \
@@ -74,9 +85,7 @@ if command -v pkg >/dev/null 2>&1; then
     python-lxml \
     python-pydantic-core \
     python-pydantic \
-    python-fastapi; do
-    pkg install -y "$pkg_name" >/dev/null 2>&1 || true
-  done
+    python-fastapi
 elif command -v apt-get >/dev/null 2>&1; then
   sudo apt-get update -y || true
   sudo apt-get install -y \
@@ -110,9 +119,11 @@ if [ -f "requirements-android.txt" ] && (pip_install -r requirements-android.txt
 else
   echo "⚠️  Full requirements-android.txt pip install hit a native build issue; installing with Termux fallbacks..."
 
-  # Install pydantic / fastapi safely without letting pip rebuild maturin from source
+  # Install pydantic / fastapi safely without letting pip fail on maturin build isolation
   if ! py_has pydantic_core; then
-    pip_install_nobi maturin >/dev/null 2>&1 || true
+    if ! python -c "import maturin" >/dev/null 2>&1; then
+      pip_install_smart maturin || true
+    fi
     pip_install_nobi pydantic-core || pip_install_nobi "pydantic-core<2.30" || true
   fi
   if ! py_has fastapi; then
@@ -122,8 +133,8 @@ else
         pip_install starlette typing-extensions annotated-types anyio idna sniffio
         pip_install --no-deps fastapi
       else
-        echo "❌ Failed to install fastapi/pydantic."
-        exit 1
+        echo "ℹ️  Falling back to pure-Python Pydantic v1 + FastAPI (<0.100)..."
+        pip_install_smart "pydantic<2" "fastapi<0.100"
       fi
     fi
   fi
