@@ -13,35 +13,120 @@ echo "🏏 Cricket Live — Android (Termux ARM64) Setup"
 echo "===================================================================="
 echo
 
+py_has() {
+  python -c "import $1" >/dev/null 2>&1
+}
+
+pip_install() {
+  python -m pip install --no-cache-dir "$@"
+}
+
 # 1. Check if running inside Termux or Android
-if [ ! -d "/data/data/com.termux" ] && [ -z "${TERMUX_VERSION:-}" ] && [ -z "${ANDROID_ROOT:-}" ]; then
+IS_TERMUX=0
+if [ -d "/data/data/com.termux" ] || [ -n "${TERMUX_VERSION:-}" ] || [ -n "${ANDROID_ROOT:-}" ]; then
+  IS_TERMUX=1
+else
   echo "⚠️  Note: This script is optimized for Android Termux."
   echo "    Continuing installation for Linux/ARM64..."
 fi
 
-# 2. Update Termux repositories and install system packages
-echo "📦 Step 1/4: Installing required system packages..."
+# 2. Update Termux repositories and install system + prebuilt Python packages
+echo "📦 Step 1/5: Installing required system & prebuilt ARM64 packages..."
 if command -v pkg >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
   pkg update -y || true
-  pkg install -y python clang libjpeg-turbo libpng ffmpeg git rust binutils make qrencode termux-tools
+  pkg upgrade -y -o Dpkg::Options::="--force-confold" || true
+
+  # Enable Termux extra repos that provide prebuilt OpenCV, PyTorch, SciPy, etc.
+  pkg install -y x11-repo tur-repo >/dev/null 2>&1 || true
+  pkg update -y || true
+
+  # Core runtime tools, FFmpeg, QR generator, and native build toolchain
+  pkg install -y \
+    python python-pip ffmpeg git qrencode termux-tools iproute2 curl wget \
+    clang make cmake ninja pkg-config binutils rust patchelf ndk-sysroot \
+    libjpeg-turbo libpng libwebp libtiff freetype littlecms openblas \
+    libxml2 libxslt zlib openssl libffi || true
+
+  # Prebuilt Termux Python packages avoid fragile source builds on Bionic libc
+  for pkg_name in \
+    python-numpy \
+    opencv-python \
+    python-opencv \
+    python-pillow \
+    python-torch \
+    python-torchvision \
+    python-scipy \
+    python-matplotlib \
+    python-psutil \
+    python-cryptography \
+    python-yaml \
+    python-lxml \
+    python-pydantic-core; do
+    pkg install -y "$pkg_name" >/dev/null 2>&1 || true
+  done
 elif command -v apt-get >/dev/null 2>&1; then
   sudo apt-get update -y || true
-  sudo apt-get install -y python3 python3-pip python3-dev ffmpeg libjpeg-dev zlib1g-dev libgl1 libglib2.0-0 git qrencode
+  sudo apt-get install -y \
+    python3 python3-pip python3-dev python3-venv \
+    ffmpeg libjpeg-dev zlib1g-dev libgl1 libglib2.0-0 \
+    libopenblas-dev build-essential git qrencode
 fi
 
-# 3. Setup Python Virtual Environment or User packages
-echo "🐍 Step 2/4: Preparing Python environment..."
-python -m pip install --upgrade pip setuptools wheel
+# 3. Prepare Python & native build environment variables for Termux
+echo "🐍 Step 2/5: Preparing Python environment..."
+if [ "$IS_TERMUX" -eq 1 ]; then
+  export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-24}"
+  export MATHLIB="m"
+  export LDFLAGS="${LDFLAGS:-} -lm"
+  export CFLAGS="${CFLAGS:-} -Wno-incompatible-function-pointer-types"
+fi
 
-echo "📥 Step 3/4: Installing Cricket Live Android dependencies..."
-if [ -f "requirements-android.txt" ]; then
-  python -m pip install -r requirements-android.txt
+if ! python -m pip --version >/dev/null 2>&1; then
+  python -m ensurepip --upgrade || true
+fi
+pip_install --upgrade pip setuptools wheel || true
+
+# 4. Install Python dependencies (using requirements-android.txt with Termux fallbacks)
+echo "📥 Step 3/5: Installing Cricket Live Android dependencies..."
+if [ -f "requirements-android.txt" ] && pip_install -r requirements-android.txt; then
+  echo "✅ Installed all packages from requirements-android.txt"
 else
-  python -m pip install fastapi "uvicorn[standard]" httpx python-dotenv psutil "websocket-client>=1.8,<2" opencv-python numpy ultralytics pyserial
+  echo "⚠️  Full requirements-android.txt pip install hit a native build issue; installing with Termux fallbacks..."
+
+  # Core web/backend dependencies
+  pip_install fastapi httpx python-dotenv "websocket-client>=1.8,<2" pyserial
+  pip_install "uvicorn[standard]" || pip_install uvicorn websockets
+  py_has psutil || pip_install "psutil>=5.9"
+
+  # Numerical & vision dependencies (prefer Termux prebuilt packages if present)
+  py_has numpy || pip_install numpy
+  if ! py_has cv2; then
+    pip_install opencv-python || pip_install opencv-python-headless
+  fi
+
+  # Ultralytics YOLO + its dependencies (avoid recompiling Termux-prebuilt torch/cv2)
+  py_has PIL || pip_install pillow || true
+  py_has yaml || pip_install pyyaml || true
+  pip_install requests tqdm py-cpuinfo ultralytics-thop || true
+  if ! py_has ultralytics; then
+    if ! pip_install ultralytics; then
+      if py_has torch && py_has cv2 && py_has numpy; then
+        echo "ℹ️  Installing ultralytics (--no-deps) using Termux prebuilt torch/cv2/numpy..."
+        pip_install --no-deps ultralytics
+      else
+        echo "❌ Failed to install ultralytics and its native dependencies."
+        exit 1
+      fi
+    fi
+  fi
 fi
 
-# 4. Create default Android .env if not exists
-echo "⚙️  Step 4/4: Configuring Android environment settings..."
+# Ensure WebSocket support for Uvicorn is present
+py_has websockets || pip_install websockets || true
+
+# 5. Create default Android .env if not exists
+echo "⚙️  Step 4/5: Configuring Android environment settings..."
 if [ ! -f ".env" ]; then
   cp .env.example .env 2>/dev/null || touch .env
   # Set Android specific defaults
@@ -52,8 +137,28 @@ if [ ! -f ".env" ]; then
   echo "Created .env with Android phone camera defaults (http://127.0.0.1:8080/video)."
 fi
 
-# 5. Make startup script executable
+# Make startup script executable
 chmod +x start_android.sh 2>/dev/null || true
+
+# 6. Verify all required Python modules and system tools
+echo "🔍 Step 5/5: Verifying installation..."
+MISSING_ITEMS=()
+for mod in fastapi uvicorn websockets httpx dotenv psutil websocket cv2 numpy ultralytics serial; do
+  if ! py_has "$mod"; then
+    MISSING_ITEMS+=("python:$mod")
+  fi
+done
+for bin_name in ffmpeg ffprobe qrencode; do
+  if ! command -v "$bin_name" >/dev/null 2>&1; then
+    MISSING_ITEMS+=("bin:$bin_name")
+  fi
+done
+
+if [ "${#MISSING_ITEMS[@]}" -gt 0 ]; then
+  echo "❌ Missing dependencies after setup: ${MISSING_ITEMS[*]}"
+  echo "   Please check the errors above and re-run: bash tools/setup_android.sh"
+  exit 1
+fi
 
 echo
 echo "===================================================================="

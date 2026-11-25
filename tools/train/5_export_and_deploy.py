@@ -51,16 +51,25 @@ def main():
             shutil.copytree(old_ov, backup_dir / "best_openvino_model", dirs_exist_ok=True)
         print(f"✅ Old model backed up to: {backup_dir}/")
 
-    # ── 2. Export .pt → OpenVINO ───────────────────────────────────────────
+    # ── 2. Copy .pt to models/ (always works on all platforms incl. Android) ──
+    dst_pt = MODELS_DIR / "best.pt"
+    shutil.copy2(src_pt, dst_pt)
+    print(f"Copied {src_pt.name} → {dst_pt}")
+
+    # ── 3. Export .pt → OpenVINO (only when OpenVINO is available) ───────────
+    try:
+        import openvino  # noqa: F401
+    except ImportError:
+        print("ℹ️  OpenVINO is not installed (e.g. Android/ARM64); deployed PyTorch best.pt only.")
+        print(f"\n🚀 New model deployed to models/")
+        print("   Restart or reload the AI ball tracker in the web UI to use it.")
+        print(f"   Old model is at: {MODELS_DIR / 'backup'}/")
+        return
+
     print(f"\nExporting {src_pt.name} → OpenVINO (imgsz={args.imgsz}) …")
     model = YOLO(str(src_pt))
     export_path = model.export(format="openvino", imgsz=args.imgsz, half=False)
     print(f"OpenVINO export saved to: {export_path}")
-
-    # ── 3. Copy .pt to models/ ────────────────────────────────────────────
-    dst_pt = MODELS_DIR / "best.pt"
-    shutil.copy2(src_pt, dst_pt)
-    print(f"Copied {src_pt.name} → {dst_pt}")
 
     # ── 4. Copy OpenVINO folder to models/best_openvino_model/ ────────────
     ov_src = Path(str(export_path))   # e.g. runs/detect/cricket_v2/weights/best_openvino_model

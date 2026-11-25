@@ -22,7 +22,7 @@ Options:
 Output is saved to runs/detect/<name>/weights/best.pt
 """
 from __future__ import annotations
-import argparse, shutil, sys
+import argparse, os, shutil, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -72,6 +72,17 @@ def main():
 
     model = YOLO(str(model_path))
 
+    is_android = (
+        os.path.exists("/data/data/com.termux")
+        or "ANDROID_ROOT" in os.environ
+        or "TERMUX_VERSION" in os.environ
+        or getattr(sys, "platform", "") == "android"
+    )
+    train_kwargs = {}
+    if is_android:
+        # Android/Termux restricts /dev/shm; single-process loading avoids DataLoader shm crashes.
+        train_kwargs["workers"] = 0
+
     results = model.train(
         data       = str(data_path),
         epochs     = args.epochs,
@@ -104,6 +115,7 @@ def main():
         project    = str(ROOT / "runs" / "detect"),
         exist_ok   = True,
         verbose    = True,
+        **train_kwargs,
     )
 
     best_pt = ROOT / "runs" / "detect" / args.name / "weights" / "best.pt"

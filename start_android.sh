@@ -11,12 +11,17 @@ export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-8000}"
 
 # 0. Automatic First-Time Install & Deploy Check
-# If packages or .env are missing, run setup_android.sh automatically
-if [ ! -f ".env" ] || ! python -c "import fastapi, uvicorn, cv2" >/dev/null 2>&1; then
+# If packages, ffmpeg, or .env are missing, run setup_android.sh automatically
+if [ ! -f ".env" ] || ! python -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
   echo "===================================================================="
-  echo "🚀 First-time run detected! Auto-installing dependencies..."
+  echo "🚀 First-time run or missing dependencies detected! Auto-installing..."
   echo "===================================================================="
   bash tools/setup_android.sh
+fi
+
+# Keep Termux CPU awake while running live match server & AI tracker
+if command -v termux-wake-lock >/dev/null 2>&1; then
+  termux-wake-lock >/dev/null 2>&1 || true
 fi
 
 # 1. Inspect all network interfaces for Hotspot or Wi-Fi
