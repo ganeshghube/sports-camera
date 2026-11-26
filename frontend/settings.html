@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
 <style>
-.camera-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.camera-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
 .camera-card{border:1px solid var(--border);border-radius:10px;padding:14px;background:#fff;cursor:pointer}
 .camera-card:hover{border-color:var(--navy);box-shadow:0 4px 14px rgba(26,58,92,.08)}
 .camera-card.selected{border:2px solid var(--green);background:#f0fdf4}
@@ -88,6 +88,7 @@
 
     <div class="row" style="margin-top:14px">
       <button class="btn" id="discover">🔎 Detect Cameras</button>
+      <button class="btn" id="detectAndroid">📱 Detect Android Camera</button>
       <button class="btn" id="test">🧪 Test Selected Source</button>
       <button class="btn primary lg" id="save">💾 Save Camera / Streaming Settings</button>
       <label class="row hint">
@@ -470,7 +471,11 @@
         b.onclick = () => {
           const c = cameras[i];
           selectedType = c.type;
-          $("camera_device").value = c.device ?? 0;
+          if (c.type === "android" || c.type === "network") {
+            $("rtsp_url").value = c.device || "http://127.0.0.1:8080/video";
+          } else {
+            $("camera_device").value = c.device ?? 0;
+          }
           $("camera_name").value = c.name || "";
           $("selectedLabel").textContent =
             "Selected: " + (types[selectedType] || selectedType);
@@ -487,6 +492,34 @@
   }
 
   $("discover").onclick = discover;
+
+  $("detectAndroid").onclick = async () => {
+    try {
+      $("cameraError").style.display = "none";
+      const r = await CL.api("/api/cameras");
+      const cameras = Array.isArray(r.cameras) ? r.cameras : [];
+      const androidCam = cameras.find(c => c.type === "android")
+        || cameras.find(c => String(c.device || "").includes("8080"));
+      await discover();
+      if (androidCam) {
+        selectedType = "android";
+        $("rtsp_url").value = androidCam.device || "http://127.0.0.1:8080/video";
+        $("camera_name").value = androidCam.name || "Android Phone Camera";
+        $("selectedLabel").textContent = "Selected: " + types.android;
+        document.querySelectorAll(".camera-card").forEach(x =>
+          x.classList.toggle("selected", x.dataset.type === "android")
+        );
+        CL.toast("Android phone camera detected on :8080");
+      } else {
+        $("cameraError").style.display = "";
+        $("cameraError").textContent = "Android camera not detected on port 8080. Open IP Webcam app and tap 'Start server', then click Detect Android Camera again.";
+        CL.toast("Android camera not detected on :8080", true);
+      }
+    } catch (e) {
+      $("cameraError").style.display = "";
+      $("cameraError").textContent = e.message;
+    }
+  };
 
   $("test").onclick = async () => {
     try {
