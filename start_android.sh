@@ -11,36 +11,41 @@ export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-8000}"
 
 # 0. Automatic First-Time Install & Deploy Check
-# If packages, ffmpeg, or .env are missing, run setup_android.sh automatically
+# If required packages or ffmpeg are missing, run setup_android.sh; otherwise start immediately
 USE_PROOT=0
 if command -v proot-distro >/dev/null 2>&1 && [ -d "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/ubuntu" ] && [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
   USE_PROOT=1
 fi
 
-if [ ! -f ".env" ]; then
-  echo "===================================================================="
-  echo "🚀 First-time run detected (.env missing)! Auto-installing..."
-  echo "===================================================================="
-  bash tools/setup_android.sh
-elif [ "$USE_PROOT" -eq 1 ]; then
-  if ! proot-distro login ubuntu --shared-tmp --bind "${ROOT_DIR}:${ROOT_DIR}" -- "${ROOT_DIR}/.venv-android/bin/python" -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1; then
+REQ_CHECK="import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial"
+
+if [ "$USE_PROOT" -eq 1 ]; then
+  if ! proot-distro login ubuntu --shared-tmp --bind "${ROOT_DIR}:${ROOT_DIR}" -- "${ROOT_DIR}/.venv-android/bin/python" -c "${REQ_CHECK}" >/dev/null 2>&1; then
     echo "===================================================================="
     echo "🚀 Missing dependencies detected! Auto-installing..."
     echo "===================================================================="
     bash tools/setup_android.sh
   fi
 elif [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
-  if ! "${ROOT_DIR}/.venv-android/bin/python" -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
+  if ! "${ROOT_DIR}/.venv-android/bin/python" -c "${REQ_CHECK}" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
     echo "===================================================================="
     echo "🚀 Missing dependencies detected! Auto-installing..."
     echo "===================================================================="
     bash tools/setup_android.sh
   fi
-elif ! python3 -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
+elif ! python3 -c "${REQ_CHECK}" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
   echo "===================================================================="
   echo "🚀 First-time run or missing dependencies detected! Auto-installing..."
   echo "===================================================================="
   bash tools/setup_android.sh
+fi
+
+if [ ! -f ".env" ]; then
+  cp .env.example .env 2>/dev/null || touch .env
+  grep -q "camera_type=" .env 2>/dev/null && sed -i 's/^camera_type=.*/camera_type=android/' .env || echo "camera_type=android" >> .env
+  grep -q "RTSP_URL=" .env 2>/dev/null && sed -i 's|^RTSP_URL=.*|RTSP_URL=http://127.0.0.1:8080/video|' .env || echo "RTSP_URL=http://127.0.0.1:8080/video" >> .env
+  grep -q "DEVICE=" .env 2>/dev/null && sed -i 's/^DEVICE=.*/DEVICE=CPU/' .env || echo "DEVICE=CPU" >> .env
+  grep -q "SERIAL_PORT=" .env 2>/dev/null && sed -i 's|^SERIAL_PORT=.*|SERIAL_PORT=/dev/ttyUSB0|' .env || echo "SERIAL_PORT=/dev/ttyUSB0" >> .env
 fi
 
 if command -v proot-distro >/dev/null 2>&1 && [ -d "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/ubuntu" ] && [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then

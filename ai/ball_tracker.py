@@ -1007,6 +1007,8 @@ def main():
     last_processed_frame_id = -1
     camera_fps_ema = 0.0
     last_camera_frame_time = None
+    out_of_pitch_since = 0.0
+    follow_engaged = False
 
     # Background inference worker keeps live camera preview & broadcast at full
     # camera FPS even when CPU YOLO inference takes 150-400ms (e.g. on Android).
@@ -1141,12 +1143,29 @@ def main():
             if (state["tracking"] and AUTO_CAMERA_TRACK and cx is not None
             and tracker.last_seen <= MAX_LOST_FRAMES
             and (ball is None or float(ball.get("confidence", 0)) >= MIN_TRACK_CONFIDENCE)):
-                pan, tilt = calculate_pan_tilt(cx, cy, w, h)
-                controller.send(pan, tilt)
-                # Calculate and publish zoom factor
-                zoom = calculate_zoom(cx, cy, w, h)
-                pub.publish({"type": "zoom", "zoom_factor": zoom, "ball_x": cx, "ball_y": cy})
+                nx, ny = cx / max(1, w), cy / max(1, h)
+                in_pitch_zone = abs(nx - 0.5) <= 0.20 and abs(ny - 0.5) <= 0.20
+                if in_pitch_zone and not follow_engaged:
+                    out_of_pitch_since = 0.0
+                else:
+                    if out_of_pitch_since == 0.0:
+                        out_of_pitch_since = now
+                    if (now - out_of_pitch_since) >= 2.0:
+                        follow_engaged = True
+
+                if follow_engaged:
+                    pan, tilt = calculate_pan_tilt(cx, cy, w, h)
+                    controller.send(pan, tilt)
+                    zoom = calculate_zoom(cx, cy, w, h)
+                    pub.publish({"type": "zoom", "zoom_factor": zoom, "ball_x": cx, "ball_y": cy})
+                else:
+                    # Keep camera & motors steady while ball is on the pitch / during 2s hold
+                    controller.stop()
+                    zoom = 1.0
+                    pub.publish({"type": "zoom", "zoom_factor": 1.0, "ball_x": None, "ball_y": None})
             else:
+                out_of_pitch_since = 0.0
+                follow_engaged = False
                 controller.stop()
                 zoom = 1.0
                 pub.publish({"type": "zoom", "zoom_factor": 1.0, "ball_x": None, "ball_y": None})
