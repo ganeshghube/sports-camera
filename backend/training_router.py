@@ -324,8 +324,8 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                         _log(f"   Validation mAP50 = {m.get('mAP50', '?')}   mAP50-95 = {m.get('mAP50_95', '?')}")
 
                     if auto_deploy:
-                        _log("🚀 Auto-deploying new weights to models/best.pt and OpenVINO IR...")
-                        _state["phase"] = "exporting & deploying"
+                        _log("🚀 Auto-deploying new weights to models/best.pt...")
+                        _state["phase"] = "deploying"
                         dep = subprocess.run(
                             [python, str(ROOT / "tools/train/5_export_and_deploy.py"),
                              "--model", str(best)],
@@ -340,7 +340,7 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                             _log("🎉 New model deployed and hot-reloaded into live camera feed!")
                         else:
                             _state["phase"] = "deploy failed"
-                            _log("⚠️ OpenVINO export failed, but trained weights are saved in runs/")
+                            _log("⚠️ Model deploy failed, but trained weights are saved in runs/")
                     else:
                         _log("Click 'Deploy Model' to activate it.")
                 else:
@@ -483,7 +483,7 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
         if not best or not Path(best).exists():
             raise HTTPException(400, "No trained model ready. Run training first.")
 
-        _log("Exporting to OpenVINO and deploying to models/...")
+        _log("Deploying trained model to models/best.pt...")
         r = subprocess.run(
             [sys.executable, str(ROOT / "tools/train/5_export_and_deploy.py"),
              "--model", best],

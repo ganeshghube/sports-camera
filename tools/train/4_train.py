@@ -125,7 +125,7 @@ def main():
 
     print(f"\n✅ Training complete!")
     print(f"   Best model: {best_pt}")
-    print(f"\nNext: run Step 5 (export.py) to convert to OpenVINO and deploy.")
+    print(f"\nNext: run Step 5 (5_export_and_deploy.py) to deploy best.pt.")
 
 
 if __name__ == "__main__":

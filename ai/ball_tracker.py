@@ -187,10 +187,9 @@ class PanTiltController:
 
 # ------------------------------------------------------------ MODEL
 class Detector:
-    """YOLO detector supporting OpenVINO (PC/Intel) with automatic PyTorch fallback (Android/ARM64)."""
+    """YOLO detector using native PyTorch / Ultralytics."""
 
     def __init__(self):
-        self.compiled = None
         self.yolo_model = None
         self.device_used = None
         self.error = None
@@ -198,53 +197,22 @@ class Detector:
 
     @property
     def ready(self):
-        return self.compiled is not None or self.yolo_model is not None
+        return self.yolo_model is not None
 
     def load(self, model_path=None):
-        self.compiled, self.yolo_model, self.error = None, None, None
+        self.yolo_model, self.error = None, None
         model_path = model_path or MODEL_PATH
 
         if not os.path.exists(model_path):
             self.error = f"AI model missing: {model_path}"
             return False
 
-        # 1. Try OpenVINO first (optimized for Intel / PC / Pi)
-        ov_error = None
         try:
-            import openvino as ov
-            self.ov_version = ov.__version__
-            core = ov.Core()
-            available = core.available_devices
-            log(f"OpenVINO {ov.__version__}, devices: {available}")
-            if DEVICE == "GPU":
-                if "GPU" not in available:
-                    raise RuntimeError("DEVICE=GPU requested but no OpenVINO GPU found")
-                device = "GPU"
-            elif DEVICE == "CPU":
-                device = "CPU"
-            else:
-                device = "GPU" if "GPU" in available else "CPU"
-
-            stem = os.path.splitext(model_path)[0]
-            xml_file = os.path.join(stem + "_openvino_model", os.path.basename(stem) + ".xml")
-            if not os.path.exists(xml_file):
-                log("OpenVINO model not found; exporting from .pt ...")
-                from ultralytics import YOLO
-                YOLO(model_path).export(format="openvino", imgsz=INPUT_SIZE)
-            self.compiled = core.compile_model(core.read_model(xml_file), device)
-            self.device_used = f"{device} (OpenVINO)"
-            log(f"Model loaded on {self.device_used}")
-            return True
-        except Exception as exc:
-            ov_error = exc
-
-        # 2. Universal PyTorch / Ultralytics fallback (Android ARM64, CPU, CUDA)
-        try:
-            log(f"Loading native PyTorch/Ultralytics model (OpenVINO skipped: {ov_error})...")
+            log(f"Loading native PyTorch/Ultralytics model: {model_path}...")
             from ultralytics import YOLO
             self.yolo_model = YOLO(model_path)
             self.device_used = "CPU (PyTorch)"
-            self.ov_version = "PyTorch/ARM64"
+            self.ov_version = "PyTorch"
             log(f"Model loaded with Ultralytics on {self.device_used}")
             return True
         except Exception as exc:
@@ -253,36 +221,7 @@ class Detector:
             return False
 
     def detect(self, frame):
-        h, w = frame.shape[:2]
-        if self.compiled is not None:
-            img = cv2.resize(frame, (INPUT_SIZE, INPUT_SIZE))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = np.expand_dims(
-                np.transpose(img.astype(np.float32) / 255.0, (2, 0, 1)), 0)
-            out = np.squeeze(self.compiled([img])[self.compiled.outputs[0]])
-            if out.ndim != 2:
-                return []
-            if out.shape[0] < out.shape[1]:
-                out = out.T
-            sx, sy = w / INPUT_SIZE, h / INPUT_SIZE
-            dets = []
-            for d in out:
-                if len(d) < 5:
-                    continue
-                conf = float(d[4])
-                if conf < CONFIDENCE:
-                    continue
-                xc, yc, bw, bh = (float(v) for v in d[:4])
-                x1 = max(0, min(w - 1, int((xc - bw / 2) * sx)))
-                y1 = max(0, min(h - 1, int((yc - bh / 2) * sy)))
-                x2 = max(0, min(w - 1, int((xc + bw / 2) * sx)))
-                y2 = max(0, min(h - 1, int((yc + bh / 2) * sy)))
-                if x2 <= x1 or y2 <= y1:
-                    continue
-                dets.append({"box": (x1, y1, x2, y2), "confidence": conf})
-            return dets
-
-        elif self.yolo_model is not None:
+        if self.yolo_model is not None:
             try:
                 results = self.yolo_model.predict(
                     frame, imgsz=INPUT_SIZE, conf=CONFIDENCE, verbose=False, device="cpu"
@@ -884,7 +823,7 @@ def draw_debug_overlay(frame, ball, w, h, tracking, fps, device):
     cv2.rectangle(frame, (15, 15), (560, 155), (0, 0, 0), -1)
     cv2.putText(frame, "CRICKET BALL AI TRACKER", (30, 45),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-    cv2.putText(frame, f"{device} / OPENVINO", (30, 75),
+    cv2.putText(frame, f"{device}", (30, 75),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
     cv2.putText(frame, f"Inference: {fps:.1f} FPS", (30, 105),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)

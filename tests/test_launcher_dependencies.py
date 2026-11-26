@@ -14,5 +14,5 @@ def test_launcher_bootstraps_dependencies_before_fastapi_import():
 
 def test_launcher_checks_core_and_ai_imports():
     text = Path('run.py').read_text()
-    for name in ('fastapi', 'uvicorn', 'cv2', 'numpy', 'openvino', 'ultralytics'):
+    for name in ('fastapi', 'uvicorn', 'cv2', 'numpy', 'ultralytics'):
         assert f'"{name}"' in text

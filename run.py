@@ -29,7 +29,7 @@ if IS_ANDROID:
     AI_IMPORTS = ("cv2", "numpy", "ultralytics", "serial")
 else:
     CORE_IMPORTS = ("fastapi", "uvicorn", "httpx", "dotenv", "playwright", "psutil", "websocket")
-    AI_IMPORTS = ("cv2", "numpy", "openvino", "ultralytics", "serial")
+    AI_IMPORTS = ("cv2", "numpy", "ultralytics", "serial")
 
 ROOT = Path(__file__).resolve().parent
 os.chdir(ROOT)
