@@ -39,11 +39,14 @@ html,body{margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;background
     if (autoZoom && hasBall) {
       const nx = detection.x / lastFrameW;
       const ny = detection.y / lastFrameH;
-      const inPitchZone = Math.abs(nx - 0.5) <= 0.20 && Math.abs(ny - 0.5) <= 0.20;
+      const inPitchZone = Math.abs(nx - 0.5) <= 0.20 && Math.abs(ny - 0.5) <= 0.25;
       const nowMs = Date.now();
       let zoomActive = false;
 
-      if (inPitchZone && currentZoom <= 1.08) {
+      if (typeof detection.shot_active === "boolean") {
+        zoomActive = detection.shot_active;
+        if (!zoomActive) outOfPitchSince = 0;
+      } else if (inPitchZone && currentZoom <= 1.08) {
         outOfPitchSince = 0;
       } else {
         if (!outOfPitchSince) outOfPitchSince = nowMs;

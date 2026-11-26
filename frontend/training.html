@@ -248,11 +248,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
     <div class="card">
       <div class="card-hd">All Frames</div>
       <div class="card-bd" style="padding:8px">
-        <div class="row" style="margin-bottom:8px;gap:6px">
+        <div class="row" style="margin-bottom:8px;gap:6px;flex-wrap:wrap">
           <button class="btn" onclick="filterFrames('all')" id="fAll">All</button>
           <button class="btn" onclick="filterFrames('pending')" id="fPend">⬜ Pending</button>
           <button class="btn" onclick="filterFrames('labeled')" id="fLabeled">🟢 Labeled</button>
           <button class="btn" onclick="filterFrames('no_ball')" id="fNoBall">🟡 No Ball</button>
+          <button class="btn" onclick="filterFrames('auto')" id="fAuto">🤖 Auto</button>
+          <button class="btn" onclick="filterFrames('manual')" id="fManual">✋ Manual</button>
+          <button class="btn" onclick="clearAutoFrames()" style="margin-left:auto;color:#dc2626">🗑️ Clear Auto</button>
         </div>
         <div id="labelGrid" class="frame-grid" style="max-height:420px;overflow-y:auto"></div>
       </div>
@@ -389,7 +392,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
   </div>
 
   <div class="card" style="margin-top:12px">
-    <div class="card-hd">📜 Model History & Rollback</div>
+    <div class="card-hd row" style="justify-content:space-between">
+      <span>📜 Model History &amp; Rollback</span>
+      <button class="btn" id="deleteAllBackupsBtn" onclick="deleteAllBackups()" style="padding:4px 10px; font-size:12px">🗑️ Delete All Backups</button>
+    </div>
     <div class="card-bd">
       <div class="hint" style="margin-bottom:8px">All prior model weights are backed up in <code>models/backup/</code>. You can instantly restore any previous version with 1 click.</div>
       <div id="backupList" style="display:grid; gap:8px; max-height:220px; overflow-y:auto"></div>
@@ -465,6 +471,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
       if (currentFilter === 'pending') return f.pending;
       if (currentFilter === 'labeled') return f.labeled;
       if (currentFilter === 'no_ball') return f.no_ball;
+      if (currentFilter === 'auto') return f.name.startsWith('auto_');
+      if (currentFilter === 'manual') return !f.name.startsWith('auto_');
       return true;
     });
     const grid = document.getElementById('labelGrid');
@@ -495,12 +503,21 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
 
   window.filterFrames = (f) => {
     currentFilter = f;
-    ['All','Pend','Labeled','NoBall'].forEach(id => {
-      document.getElementById('f'+id)?.classList.remove('primary');
-    });
-    document.getElementById('f' + f.charAt(0).toUpperCase() + f.slice(1).replace('_ball','NoBall'))?.classList.add('primary');
-    document.getElementById('fAll').classList[f==='all'?'add':'remove']('primary');
+    const map = { all: 'fAll', pending: 'fPend', labeled: 'fLabeled', no_ball: 'fNoBall', auto: 'fAuto', manual: 'fManual' };
+    Object.values(map).forEach(id => document.getElementById(id)?.classList.remove('primary'));
+    document.getElementById(map[f] || 'fAll')?.classList.add('primary');
     renderLabelGrid();
+  };
+
+  window.clearAutoFrames = async () => {
+    const autoCount = allFrames.filter(f => f.name.startsWith('auto_')).length;
+    if (!autoCount) { CL.toast('No auto-harvested frames to clear.'); return; }
+    if (!confirm(`Delete all ${autoCount} auto-harvested frames? Manual/corrected frames will stay.`)) return;
+    try {
+      const r = await CL.api('/api/training/frames-auto', { method: 'DELETE' });
+      CL.toast(`🗑️ Cleared ${r.count || 0} auto-harvested frame(s)`);
+      await loadFrames();
+    } catch (e) { CL.toast(e.message, true); }
   };
 
   // ── Capture frame ──────────────────────────────────────────────────────────
@@ -836,7 +853,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
             <b>Backup: ${b.stamp}</b>
             <div class="hint">${b.path}</div>
           </div>
-          <button class="btn" onclick="rollbackModel('${b.stamp}')">⏪ Rollback to this</button>
+          <div class="row" style="gap:6px">
+            <button class="btn" onclick="rollbackModel('${CL.esc(b.stamp)}')">⏪ Rollback to this</button>
+            <button class="btn" onclick="deleteBackup('${CL.esc(b.stamp)}')" style="color:#dc2626">🗑️ Delete</button>
+          </div>
         </div>
       `).join('');
     } catch (e) {}
@@ -847,6 +867,24 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
     try {
       await CL.api('/api/training/models/rollback', { method: 'POST', body: { stamp } });
       CL.toast(`✅ Successfully rolled back to ${stamp} and hot-reloaded tracker!`);
+      loadModelHistory();
+    } catch (e) { CL.toast(e.message, true); }
+  };
+
+  window.deleteBackup = async (stamp) => {
+    if (!confirm(`Delete backup ${stamp}? Active models/best.pt will NOT be affected.`)) return;
+    try {
+      await CL.api('/api/training/models/backup/' + encodeURIComponent(stamp), { method: 'DELETE' });
+      CL.toast(`🗑️ Deleted backup ${stamp}`);
+      loadModelHistory();
+    } catch (e) { CL.toast(e.message, true); }
+  };
+
+  window.deleteAllBackups = async () => {
+    if (!confirm('Delete ALL older model backups? Active models/best.pt will NOT be affected.')) return;
+    try {
+      const r = await CL.api('/api/training/models/backups', { method: 'DELETE' });
+      CL.toast(`🗑️ Deleted ${r.count || 0} backup(s)`);
       loadModelHistory();
     } catch (e) { CL.toast(e.message, true); }
   };

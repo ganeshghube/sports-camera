@@ -43,28 +43,38 @@ def main():
     out_dir    = Path(args.out)
 
     for split in ("train", "val"):
-        (out_dir / "images" / split).mkdir(parents=True, exist_ok=True)
-        (out_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
+        for sub in ("images", "labels"):
+            d = out_dir / sub / split
+            if d.exists():
+                shutil.rmtree(d, ignore_errors=True)
+            d.mkdir(parents=True, exist_ok=True)
 
     images = sorted(p for p in frames_dir.rglob("*") if p.suffix.lower() in IMG_EXTS)
     if not images:
         sys.exit(f"No images found in {frames_dir}")
 
-    # Pair images with labels (label may be missing = negative / no-ball frame)
-    pairs: list[tuple[Path, Path | None]] = []
+    # Pair images with labels (label may be missing or empty = negative / no-ball frame)
+    pos_pairs: list[tuple[Path, Path | None]] = []
+    neg_pairs: list[tuple[Path, Path | None]] = []
     for img in images:
         lbl = labels_dir / (img.stem + ".txt")
-        if lbl.exists():
-            pairs.append((img, lbl))
+        if lbl.exists() and lbl.read_text(encoding="utf-8").strip():
+            pos_pairs.append((img, lbl))
+        elif lbl.exists() and not args.only_labeled:
+            neg_pairs.append((img, lbl))
         elif not args.only_labeled:
-            pairs.append((img, None))   # hard-negative: teaches "no ball" here
+            neg_pairs.append((img, None))   # hard-negative: teaches "no ball" here
 
     random.seed(args.seed)
-    random.shuffle(pairs)
+    random.shuffle(pos_pairs)
+    random.shuffle(neg_pairs)
 
-    n_val   = max(1, int(len(pairs) * args.val_split))
-    n_train = len(pairs) - n_val
-    splits  = {"train": pairs[:n_train], "val": pairs[n_train:]}
+    n_pos_val = max(1, int(len(pos_pairs) * args.val_split)) if len(pos_pairs) > 1 else 0
+    n_neg_val = int(len(neg_pairs) * args.val_split)
+    splits = {
+        "train": pos_pairs[n_pos_val:] + neg_pairs[n_neg_val:],
+        "val":   pos_pairs[:n_pos_val] + neg_pairs[:n_neg_val],
+    }
 
     counts = {}
     for split, ps in splits.items():

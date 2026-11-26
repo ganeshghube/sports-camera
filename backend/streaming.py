@@ -138,10 +138,14 @@ def build_router(store, require_user, current_user, log, root: Path,
                 by = float(det.get("y", fh / 2))
                 nx = bx / fw
                 ny = by / fh
-                in_pitch_zone = abs(nx - 0.5) <= 0.20 and abs(ny - 0.5) <= 0.20
+                in_pitch_zone = abs(nx - 0.5) <= 0.20 and abs(ny - 0.5) <= 0.25
                 zoom_active = False
 
-                if in_pitch_zone and zoom_state["current_zoom"] <= 1.08:
+                if "shot_active" in det and isinstance(det.get("shot_active"), bool):
+                    zoom_active = bool(det.get("shot_active"))
+                    if not zoom_active:
+                        zoom_state["out_of_pitch_since"] = 0.0
+                elif in_pitch_zone and zoom_state["current_zoom"] <= 1.08:
                     zoom_state["out_of_pitch_since"] = 0.0
                 else:
                     if not zoom_state.get("out_of_pitch_since"):

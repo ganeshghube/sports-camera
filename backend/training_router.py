@@ -182,18 +182,19 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                     frame = getattr(tracker_holder, "last_frame", None)
                     det_ts = (det or {}).get("timestamp", 0)
 
-                    # 1. Harvest positive frame (high-confidence ball)
-                    if det and frame and (now - det_ts < 1.2):
-                        if det.get("detected") and float(det.get("confidence", 0)) >= 0.45:
-                            if now - _auto_state["last_harvest_pos"] >= 3.0:
-                                fw = max(1, det.get("frame_width", 1280))
-                                fh = max(1, det.get("frame_height", 720))
-                                box = det.get("box") or [det["x"] - 15, det["y"] - 15, det["x"] + 15, det["y"] + 15]
-                                x1, y1, x2, y2 = box
-                                cx = max(0.001, min(0.999, ((x1 + x2) / 2.0) / fw))
-                                cy = max(0.001, min(0.999, ((y1 + y2) / 2.0) / fh))
-                                w = max(0.002, min(0.999, abs(x2 - x1) / fw))
-                                h = max(0.002, min(0.999, abs(y2 - y1) / fh))
+                    # 1. Harvest positive frame (high-confidence ball with sane ball-sized box)
+                    if det and frame and (now - det_ts < 1.2) and det.get("detected"):
+                        if float(det.get("confidence", 0)) >= 0.50 and (now - _auto_state["last_harvest_pos"] >= 3.0):
+                            fw = max(1, det.get("frame_width", 1280))
+                            fh = max(1, det.get("frame_height", 720))
+                            box = det.get("box") or [det["x"] - 15, det["y"] - 15, det["x"] + 15, det["y"] + 15]
+                            x1, y1, x2, y2 = box
+                            cx = max(0.001, min(0.999, ((x1 + x2) / 2.0) / fw))
+                            cy = max(0.001, min(0.999, ((y1 + y2) / 2.0) / fh))
+                            w = max(0.002, min(0.999, abs(x2 - x1) / fw))
+                            h = max(0.002, min(0.999, abs(y2 - y1) / fh))
+                            # Reject oversized false positives (people/hands/stumps)
+                            if w <= 0.12 and h <= 0.15:
                                 name = f"auto_{int(now * 1000)}"
                                 (IMAGES_DIR / f"{name}.jpg").write_bytes(frame)
                                 (LABELS_DIR / f"{name}.txt").write_text(f"0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n", encoding="utf-8")
@@ -201,8 +202,9 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                                 _auto_state["harvested_session"] += 1
                                 _auto_state["total_harvested"] += 1
 
-                        # 2. Harvest negative frame (pitch/field with no ball present)
-                        elif not det.get("detected") and (now - _auto_state["last_harvest_neg"] >= 20.0):
+                    # 2. Harvest negative frame (pitch/field with no ball present)
+                    elif frame and (not det or not det.get("detected") or (now - det_ts >= 1.2)):
+                        if now - _auto_state["last_harvest_neg"] >= 20.0:
                             name = f"auto_neg_{int(now * 1000)}"
                             (IMAGES_DIR / f"{name}.jpg").write_bytes(frame)
                             (LABELS_DIR / f"{name}.txt").write_text("", encoding="utf-8")
@@ -269,8 +271,9 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                 _state["phase"] = "fine-tuning YOLO"
                 _state["progress"] = 10
                 base_model = ROOT / "models" / "best.pt"
-                _log(f"Fine-tuning YOLO weights ({epochs} epochs, batch {batch}, starting from {base_model.name})...")
-                _log("Freezing 10 backbone layers to preserve all prior model capabilities.")
+                eff_batch = min(batch, 4) if len(all_imgs) < 40 else batch
+                eff_freeze = 0 if len(all_imgs) < 35 else 4
+                _log(f"Fine-tuning YOLO weights ({epochs} epochs, batch {eff_batch}, freeze={eff_freeze}, starting from {base_model.name})...")
                 _log("-" * 55)
 
                 run_name = f"cricket_train_{int(time.time())}"
@@ -279,11 +282,11 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                      "--data", str(DATASET_DIR / "data.yaml"),
                      "--model", str(base_model),
                      "--epochs", str(epochs),
-                     "--batch", str(batch),
+                     "--batch", str(eff_batch),
                      "--name", run_name,
-                     "--lr0", "0.001",
-                     "--freeze", "10",
-                     "--patience", "10"],
+                     "--lr0", "0.002",
+                     "--freeze", str(eff_freeze),
+                     "--patience", "15"],
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, encoding="utf-8", cwd=str(ROOT)
                 )
@@ -311,6 +314,28 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
 
                 _proc.wait()
                 best = ROOT / "runs" / "detect" / run_name / "weights" / "best.pt"
+
+                # Read accurate mAP50 / mAP50-95 from Ultralytics results.csv
+                results_csv = ROOT / "runs" / "detect" / run_name / "results.csv"
+                if results_csv.exists():
+                    try:
+                        import csv as _csv
+                        with results_csv.open("r", encoding="utf-8") as cf:
+                            rows = list(_csv.DictReader(cf))
+                        best_m50, best_m95 = -1.0, None
+                        for row in rows:
+                            clean = {k.strip(): v.strip() for k, v in row.items() if k}
+                            m50 = float(clean.get("metrics/mAP50(B)", -1))
+                            m95 = float(clean.get("metrics/mAP50-95(B)", -1))
+                            if m50 >= best_m50:
+                                best_m50 = m50
+                                best_m95 = m95
+                        if best_m50 >= 0:
+                            _state["metrics"]["mAP50"] = round(best_m50, 4)
+                            _state["metrics"]["mAP50_95"] = round(best_m95, 4) if best_m95 >= 0 else None
+                            _auto_state["last_mAP50"] = round(best_m50, 4)
+                    except Exception:
+                        pass
 
                 if _proc.returncode == 0 and best.exists():
                     _state["status"] = "done"
@@ -591,5 +616,38 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
         _notify_tracker(camera_control)
         _log(f"⏪ Rolled back model to backup {stamp} and hot-reloaded into AI tracker!")
         return {"rolled_back": True, "stamp": stamp}
+
+    @router.delete("/models/backup/{stamp}")
+    def delete_model_backup(stamp: str, _=auth_dep):
+        if "/" in stamp or "\\" in stamp or ".." in stamp:
+            raise HTTPException(400, "Invalid backup stamp")
+        backup_dir = (BACKUP_DIR / stamp).resolve()
+        if backup_dir.parent != BACKUP_DIR.resolve() or not backup_dir.is_dir():
+            raise HTTPException(404, f"Backup not found: {stamp}")
+        shutil.rmtree(backup_dir)
+        _log(f"🗑️ Deleted model backup {stamp}")
+        return {"deleted": True, "stamp": stamp}
+
+    @router.delete("/models/backups")
+    def delete_all_model_backups(_=auth_dep):
+        removed = 0
+        if BACKUP_DIR.exists():
+            for d in list(BACKUP_DIR.iterdir()):
+                if d.is_dir():
+                    shutil.rmtree(d, ignore_errors=True)
+                    removed += 1
+        _log(f"🗑️ Deleted {removed} old model backup(s)")
+        return {"deleted": True, "count": removed}
+
+    @router.delete("/frames-auto")
+    def delete_auto_frames(_=auth_dep):
+        removed = 0
+        for img in list(IMAGES_DIR.glob("auto_*.jpg")):
+            img.unlink(missing_ok=True)
+            (LABELS_DIR / f"{img.stem}.txt").unlink(missing_ok=True)
+            removed += 1
+        _auto_state["harvested_session"] = 0
+        _log(f"🗑️ Deleted {removed} auto-harvested frame(s)")
+        return {"deleted": True, "count": removed}
 
     return router

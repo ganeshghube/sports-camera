@@ -29,6 +29,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data",   required=True, help="Path to data.yaml")
     ap.add_argument("--model",  default=str(ROOT / "models" / "best.pt"),
@@ -94,22 +98,24 @@ def main():
         device     = device,
         name       = args.name,
         lr0        = args.lr0,
-        lrf        = 0.01,          # final LR = lr0 * lrf
+        lrf        = 0.05,          # gentler final LR decay for small datasets
+        cos_lr     = True,
         momentum   = 0.937,
         weight_decay = 0.0005,
-        warmup_epochs = 3,
+        warmup_epochs = 2,
         freeze     = args.freeze,
         patience   = args.patience,
-        # Augmentation — tuned for cricket (fast-moving small ball)
+        # Augmentation — tuned for small fast-moving cricket ball
         hsv_h      = 0.015,
-        hsv_s      = 0.7,
+        hsv_s      = 0.6,
         hsv_v      = 0.4,
-        degrees    = 5.0,           # slight rotation (not too much — ball trajectory matters)
-        translate  = 0.1,
-        scale      = 0.5,
-        fliplr     = 0.5,           # horizontal flip OK (symmetric pitch)
-        flipud     = 0.0,           # vertical flip — don't do this (sky/ground)
-        mosaic     = 0.5,
+        degrees    = 5.0,
+        translate  = 0.08,
+        scale      = 0.25,          # avoid shrinking tiny ball out of frame
+        fliplr     = 0.5,
+        flipud     = 0.0,
+        mosaic     = 0.3,
+        close_mosaic = 5,           # clean un-mosaiced frames in final 5 epochs
         mixup      = 0.0,
         copy_paste = 0.0,
         # Save settings

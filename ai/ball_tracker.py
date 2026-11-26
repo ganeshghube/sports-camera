@@ -1008,6 +1008,7 @@ def main():
     camera_fps_ema = 0.0
     last_camera_frame_time = None
     out_of_pitch_since = 0.0
+    stationary_since = 0.0
     follow_engaged = False
 
     # Background inference worker keeps live camera preview & broadcast at full
@@ -1144,14 +1145,31 @@ def main():
             and tracker.last_seen <= MAX_LOST_FRAMES
             and (ball is None or float(ball.get("confidence", 0)) >= MIN_TRACK_CONFIDENCE)):
                 nx, ny = cx / max(1, w), cy / max(1, h)
-                in_pitch_zone = abs(nx - 0.5) <= 0.20 and abs(ny - 0.5) <= 0.20
-                if in_pitch_zone and not follow_engaged:
-                    out_of_pitch_since = 0.0
+                in_pitch_zone = abs(nx - 0.5) <= 0.20 and abs(ny - 0.5) <= 0.25
+                ball_speed = (tracker.velocity_x ** 2 + tracker.velocity_y ** 2) ** 0.5
+
+                if not follow_engaged:
+                    # Stage 1: Bowler run-up & delivery — keep full pitch steady
+                    if in_pitch_zone:
+                        out_of_pitch_since = 0.0
+                    else:
+                        if out_of_pitch_since == 0.0:
+                            out_of_pitch_since = now
+                        # Stage 2: Shot detected when ball exits pitch with motion
+                        if (now - out_of_pitch_since) >= 0.35 and ball_speed >= max(15.0, w * 0.015):
+                            follow_engaged = True
+                            stationary_since = 0.0
                 else:
-                    if out_of_pitch_since == 0.0:
-                        out_of_pitch_since = now
-                    if (now - out_of_pitch_since) >= 2.0:
-                        follow_engaged = True
+                    # Stage 3: Dead-ball detection (stopped/settled) -> return to pitch
+                    if ball_speed < max(10.0, w * 0.01):
+                        if stationary_since == 0.0:
+                            stationary_since = now
+                        elif (now - stationary_since) >= 1.2:
+                            follow_engaged = False
+                            out_of_pitch_since = 0.0
+                            stationary_since = 0.0
+                    else:
+                        stationary_since = 0.0
 
                 if follow_engaged:
                     pan, tilt = calculate_pan_tilt(cx, cy, w, h)
@@ -1159,12 +1177,12 @@ def main():
                     zoom = calculate_zoom(cx, cy, w, h)
                     pub.publish({"type": "zoom", "zoom_factor": zoom, "ball_x": cx, "ball_y": cy})
                 else:
-                    # Keep camera & motors steady while ball is on the pitch / during 2s hold
                     controller.stop()
                     zoom = 1.0
                     pub.publish({"type": "zoom", "zoom_factor": 1.0, "ball_x": None, "ball_y": None})
             else:
                 out_of_pitch_since = 0.0
+                stationary_since = 0.0
                 follow_engaged = False
                 controller.stop()
                 zoom = 1.0
@@ -1182,7 +1200,7 @@ def main():
                     "x": int(ball["x"]), "y": int(ball["y"]), "box": list(ball["box"]),
                     "frame_width": w, "frame_height": h, "fps": round(inference_fps, 1),
                     "motor_target_x": round(w * TARGET_X, 1), "motor_target_y": round(h * TARGET_Y, 1),
-                    "zoom_factor": zoom,
+                    "zoom_factor": zoom, "shot_active": follow_engaged,
                 })
 
             if (PREVIEW_STREAM and pub.connected
