@@ -650,4 +650,32 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
         _log(f"🗑️ Deleted {removed} auto-harvested frame(s)")
         return {"deleted": True, "count": removed}
 
+    @router.post("/models/upload")
+    async def upload_model(request: Request, filename: str = "best.pt", _=auth_dep):
+        """Upload a ready-made YOLOv8 .pt model, backup current model, and hot-reload."""
+        if not filename.lower().endswith(".pt"):
+            raise HTTPException(400, "Please upload a valid YOLO .pt model file.")
+        body = await request.body()
+        if len(body) < 100_000:
+            raise HTTPException(400, "Uploaded file is too small to be a valid YOLO .pt model.")
+        if len(body) > 500 * 1024 * 1024:
+            raise HTTPException(413, "Model file exceeds 500 MB limit.")
+
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        dst_pt = MODELS_DIR / "best.pt"
+        if dst_pt.exists():
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            bdir = BACKUP_DIR / stamp
+            bdir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(dst_pt, bdir / "best.pt")
+
+        tmp_pt = MODELS_DIR / f"upload_{int(time.time() * 1000)}.pt.tmp"
+        tmp_pt.write_bytes(body)
+        shutil.move(str(tmp_pt), str(dst_pt))
+
+        _notify_tracker(camera_control)
+        _record_model_history(f"uploaded:{Path(filename).name}", {})
+        _log(f"⬆️ Uploaded & activated custom model ({Path(filename).name}, {len(body) // (1024 * 1024)} MB)")
+        return {"uploaded": True, "filename": Path(filename).name, "bytes": len(body)}
+
     return router

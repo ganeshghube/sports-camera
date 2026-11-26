@@ -392,6 +392,15 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
   </div>
 
   <div class="card" style="margin-top:12px">
+    <div class="card-hd">⬆️ Upload Ready-Made Model (.pt)</div>
+    <div class="card-bd row" style="gap:10px; flex-wrap:wrap">
+      <input type="file" id="uploadModelFile" accept=".pt" class="in" style="max-width:320px">
+      <button class="btn primary" id="uploadModelBtn" onclick="uploadModel()">⬆️ Upload &amp; Activate Model</button>
+      <span class="hint">Backs up your current <code>models/best.pt</code> and hot-reloads the uploaded YOLOv8 <code>.pt</code> model immediately.</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
     <div class="card-hd row" style="justify-content:space-between">
       <span>📜 Model History &amp; Rollback</span>
       <button class="btn" id="deleteAllBackupsBtn" onclick="deleteAllBackups()" style="padding:4px 10px; font-size:12px">🗑️ Delete All Backups</button>
@@ -887,6 +896,35 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
       CL.toast(`🗑️ Deleted ${r.count || 0} backup(s)`);
       loadModelHistory();
     } catch (e) { CL.toast(e.message, true); }
+  };
+
+  window.uploadModel = async () => {
+    const inp = document.getElementById('uploadModelFile');
+    const btn = document.getElementById('uploadModelBtn');
+    const file = inp && inp.files && inp.files[0];
+    if (!file) { CL.toast('Choose a .pt model file first.', true); return; }
+    if (!file.name.toLowerCase().endsWith('.pt')) { CL.toast('Please select a .pt file.', true); return; }
+    try {
+      btn.disabled = true;
+      btn.textContent = '⏳ Uploading…';
+      const r = await fetch('/api/training/models/upload?filename=' + encodeURIComponent(file.name), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: file,
+        credentials: 'same-origin'
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Upload failed');
+      CL.toast(`✅ Uploaded & activated ${data.filename}!`);
+      document.getElementById('deployDoneCard').style.display = '';
+      inp.value = '';
+      loadModelHistory();
+    } catch (e) {
+      CL.toast(e.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⬆️ Upload & Activate Model';
+    }
   };
 
   // ── Init ───────────────────────────────────────────────────────────────────
