@@ -27,6 +27,7 @@ html,body{margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;background
   let currentZoom = 1.0, targetZoom = 1.0;
   let currentOriginX = 50, currentOriginY = 50, targetOriginX = 50, targetOriginY = 50;
   let detection = null, lastFrameW = 0, lastFrameH = 0, lastDetectionAt = 0;
+  let outOfPitchSince = 0;
   let lastZoomTime = performance.now();
 
   function updateZoom() {
@@ -36,24 +37,44 @@ html,body{margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;background
 
     const hasBall = detection && lastFrameW && lastFrameH && (Date.now() - lastDetectionAt < 1400);
     if (autoZoom && hasBall) {
-      const zFactor = detection.zoom_factor ? Math.max(1.4, Math.min(3.0, Number(detection.zoom_factor))) : 2.2;
-      targetZoom = zFactor;
-      const normX = (detection.x / lastFrameW) * 100;
-      const normY = (detection.y / lastFrameH) * 100;
-      const clampedX = Math.max(12, Math.min(88, normX));
-      const clampedY = Math.max(12, Math.min(88, normY));
-      if (Math.abs(clampedX - targetOriginX) > 2.0) targetOriginX = clampedX;
-      if (Math.abs(clampedY - targetOriginY) > 2.0) targetOriginY = clampedY;
+      const nx = detection.x / lastFrameW;
+      const ny = detection.y / lastFrameH;
+      const inPitchZone = Math.abs(nx - 0.5) <= 0.20 && Math.abs(ny - 0.5) <= 0.20;
+      const nowMs = Date.now();
+      let zoomActive = false;
+
+      if (inPitchZone && currentZoom <= 1.08) {
+        outOfPitchSince = 0;
+      } else {
+        if (!outOfPitchSince) outOfPitchSince = nowMs;
+        if (nowMs - outOfPitchSince >= 2000 || currentZoom > 1.08) {
+          zoomActive = true;
+        }
+      }
+
+      if (zoomActive) {
+        const zFactor = detection.zoom_factor ? Math.max(1.4, Math.min(3.0, Number(detection.zoom_factor))) : 2.2;
+        targetZoom = zFactor;
+        const clampedX = Math.max(12, Math.min(88, nx * 100));
+        const clampedY = Math.max(12, Math.min(88, ny * 100));
+        if (Math.abs(clampedX - targetOriginX) > 2.0) targetOriginX = clampedX;
+        if (Math.abs(clampedY - targetOriginY) > 2.0) targetOriginY = clampedY;
+      } else {
+        targetZoom = 1.0;
+        targetOriginX = 50;
+        targetOriginY = 50;
+      }
     } else {
+      outOfPitchSince = 0;
       targetZoom = 1.0;
       targetOriginX = 50;
       targetOriginY = 50;
     }
 
-    // Slew-rate limited cinematic zoom matching preview.html
-    const maxZoomRate = 0.25;
-    const maxPanRate = 14.0;
-    const ease = 0.035;
+    // Slew-rate limited cinematic zoom matching preview.html (40% slower)
+    const maxZoomRate = 0.15;
+    const maxPanRate = 8.4;
+    const ease = 0.021;
 
     const maxZoomStep = maxZoomRate * dt;
     const zoomDiff = targetZoom - currentZoom;

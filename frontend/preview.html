@@ -102,6 +102,7 @@
   let currentZoom=1.0, targetZoom=1.0;
   let currentOriginX=50, currentOriginY=50, targetOriginX=50, targetOriginY=50;
   let detection=null, lastFrameW=0, lastFrameH=0, lastDetectionAt=0;
+  let outOfPitchSince=0;
   let lastZoomTime=performance.now();
   const tc=$("trackCanvas"), tctx=tc.getContext("2d");
 
@@ -118,20 +119,43 @@
 
     const hasBall = detection && lastFrameW && lastFrameH && (Date.now()-lastDetectionAt < 1400);
     if(autoZoom && hasBall){
-      const zFactor = detection.zoom_factor ? Math.max(1.4, Math.min(3.0, Number(detection.zoom_factor))) : 2.2;
-      targetZoom = zFactor;
-      const normX = (detection.x / lastFrameW) * 100;
-      const normY = (detection.y / lastFrameH) * 100;
-      const clampedX = Math.max(12, Math.min(88, normX));
-      const clampedY = Math.max(12, Math.min(88, normY));
-      // Deadband: ignore tiny ball jitter < 2% to avoid rapid micro-panning
-      if(Math.abs(clampedX - targetOriginX) > 2.0) targetOriginX = clampedX;
-      if(Math.abs(clampedY - targetOriginY) > 2.0) targetOriginY = clampedY;
+      const nx = detection.x / lastFrameW;
+      const ny = detection.y / lastFrameH;
+      const inPitchZone = Math.abs(nx - 0.5) <= 0.20 && Math.abs(ny - 0.5) <= 0.20;
+      const nowMs = Date.now();
+      let zoomActive = false;
 
-      $("zoomHud").textContent = `ZOOM: ${currentZoom.toFixed(1)}x • TRACKING`;
-      $("zoomHud").className = "hud-pill good";
-      $("zoomStatus").textContent = `ON (${currentZoom.toFixed(1)}x)`;
+      if(inPitchZone && currentZoom <= 1.08){
+        outOfPitchSince = 0;
+      } else {
+        if(!outOfPitchSince) outOfPitchSince = nowMs;
+        if(nowMs - outOfPitchSince >= 2000 || currentZoom > 1.08){
+          zoomActive = true;
+        }
+      }
+
+      if(zoomActive){
+        const zFactor = detection.zoom_factor ? Math.max(1.4, Math.min(3.0, Number(detection.zoom_factor))) : 2.2;
+        targetZoom = zFactor;
+        const clampedX = Math.max(12, Math.min(88, nx * 100));
+        const clampedY = Math.max(12, Math.min(88, ny * 100));
+        // Deadband: ignore tiny ball jitter < 2% to avoid rapid micro-panning
+        if(Math.abs(clampedX - targetOriginX) > 2.0) targetOriginX = clampedX;
+        if(Math.abs(clampedY - targetOriginY) > 2.0) targetOriginY = clampedY;
+
+        $("zoomHud").textContent = `ZOOM: ${currentZoom.toFixed(1)}x • TRACKING`;
+        $("zoomHud").className = "hud-pill good";
+        $("zoomStatus").textContent = `ON (${currentZoom.toFixed(1)}x)`;
+      } else {
+        targetZoom = 1.0;
+        targetOriginX = 50;
+        targetOriginY = 50;
+        $("zoomHud").textContent = inPitchZone ? "ZOOM: 1.0x • PITCH STEADY" : "ZOOM: 1.0x • HOLD";
+        $("zoomHud").className = "hud-pill good";
+        $("zoomStatus").textContent = "STEADY (1.0x)";
+      }
     } else {
+      outOfPitchSince = 0;
       targetZoom = 1.0;
       targetOriginX = 50;
       targetOriginY = 50;
@@ -146,12 +170,12 @@
       }
     }
 
-    // Slew-rate limited cinematic zoom:
-    // maxZoomRate: 0.25 zoom factor units per second (takes ~4.8s to go from 1.0x to 2.2x)
-    // maxPanRate: 14% origin shift per second
-    const maxZoomRate = 0.25;
-    const maxPanRate = 14.0;
-    const ease = 0.035;
+    // Slew-rate limited cinematic zoom (40% slower):
+    // maxZoomRate: 0.15 zoom factor units per second
+    // maxPanRate: 8.4% origin shift per second
+    const maxZoomRate = 0.15;
+    const maxPanRate = 8.4;
+    const ease = 0.021;
 
     const maxZoomStep = maxZoomRate * dt;
     const zoomDiff = targetZoom - currentZoom;

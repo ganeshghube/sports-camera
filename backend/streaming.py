@@ -132,35 +132,54 @@ def build_router(store, require_user, current_user, log, root: Path,
             )
 
             if auto_zoom_enabled and has_ball:
-                det_zoom = float(det.get("zoom_factor") or 2.2)
-                target_zoom = max(1.4, min(3.0, det_zoom))
                 fw = float(det.get("frame_width") or w)
                 fh = float(det.get("frame_height") or h)
                 bx = float(det.get("x", fw / 2))
                 by = float(det.get("y", fh / 2))
-                target_cx = max(0.12, min(0.88, bx / fw))
-                target_cy = max(0.12, min(0.88, by / fh))
+                nx = bx / fw
+                ny = by / fh
+                in_pitch_zone = abs(nx - 0.5) <= 0.20 and abs(ny - 0.5) <= 0.20
+                zoom_active = False
+
+                if in_pitch_zone and zoom_state["current_zoom"] <= 1.08:
+                    zoom_state["out_of_pitch_since"] = 0.0
+                else:
+                    if not zoom_state.get("out_of_pitch_since"):
+                        zoom_state["out_of_pitch_since"] = now
+                    if (now - zoom_state["out_of_pitch_since"]) >= 2.0 or zoom_state["current_zoom"] > 1.08:
+                        zoom_active = True
+
+                if zoom_active:
+                    det_zoom = float(det.get("zoom_factor") or 2.2)
+                    target_zoom = max(1.4, min(3.0, det_zoom))
+                    target_cx = max(0.12, min(0.88, nx))
+                    target_cy = max(0.12, min(0.88, ny))
+                else:
+                    target_zoom = float(settings().get("digital_zoom", 1.0))
+                    target_cx = 0.5
+                    target_cy = 0.5
             else:
+                zoom_state["out_of_pitch_since"] = 0.0
                 target_zoom = float(settings().get("digital_zoom", 1.0))
                 target_cx = 0.5
                 target_cy = 0.5
 
-            # Slew-rate limited cinematic zoom matching preview.html & broadcast.html
+            # Slew-rate limited cinematic zoom matching preview.html & broadcast.html (40% slower)
             dt = max(0.001, min(now - float(zoom_state.get("last_time", now) or now), 0.1))
             zoom_state["last_time"] = now
 
-            max_zoom_step = 0.25 * dt
+            max_zoom_step = 0.15 * dt
             zoom_diff = target_zoom - zoom_state["current_zoom"]
-            zoom_step = (1.0 if zoom_diff >= 0 else -1.0) * min(abs(zoom_diff) * (0.035 * 60 * dt), max_zoom_step)
+            zoom_step = (1.0 if zoom_diff >= 0 else -1.0) * min(abs(zoom_diff) * (0.021 * 60 * dt), max_zoom_step)
             zoom_state["current_zoom"] += zoom_step
 
-            max_pan_step = 0.14 * dt
+            max_pan_step = 0.084 * dt
             cx_diff = target_cx - zoom_state["current_cx"]
-            cx_step = (1.0 if cx_diff >= 0 else -1.0) * min(abs(cx_diff) * (0.035 * 60 * dt), max_pan_step)
+            cx_step = (1.0 if cx_diff >= 0 else -1.0) * min(abs(cx_diff) * (0.021 * 60 * dt), max_pan_step)
             zoom_state["current_cx"] += cx_step
 
             cy_diff = target_cy - zoom_state["current_cy"]
-            cy_step = (1.0 if cy_diff >= 0 else -1.0) * min(abs(cy_diff) * (0.035 * 60 * dt), max_pan_step)
+            cy_step = (1.0 if cy_diff >= 0 else -1.0) * min(abs(cy_diff) * (0.021 * 60 * dt), max_pan_step)
             zoom_state["current_cy"] += cy_step
 
             zoomed = False
