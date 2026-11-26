@@ -58,17 +58,32 @@ EOF
 
 else
   # --------------------------------------------------------------------------
-  # Generic Linux/ARM64 fallback
+  # Generic Linux/ARM64 fallback (UserLAnd Fedora/Ubuntu/Debian, etc.)
   # --------------------------------------------------------------------------
   echo "📦 Step 1/5: Installing system packages..."
+  SUDO=""
+  if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
+  fi
   if command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get update -y || true
-    sudo apt-get install -y python3 python3-pip python3-dev python3-venv ffmpeg libjpeg-dev zlib1g-dev libgl1 libglib2.0-0 git qrencode
+    $SUDO apt-get update -y || true
+    $SUDO apt-get install -y python3 python3-pip python3-dev python3-venv ffmpeg libjpeg-dev zlib1g-dev libgl1 libglib2.0-0 git qrencode iproute2 || true
+  elif command -v dnf >/dev/null 2>&1; then
+    $SUDO dnf install -y python3 python3-pip python3-devel mesa-libGL glib2 libjpeg-turbo-devel zlib-devel git qrencode iproute || true
+    if ! command -v ffmpeg >/dev/null 2>&1; then
+      $SUDO dnf install -y ffmpeg-free || {
+        $SUDO dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm" || true
+        $SUDO dnf install -y ffmpeg || true
+      }
+    fi
   fi
 
   echo "📥 Step 2-3/5: Installing Cricket Live Android dependencies..."
-  python3 -m pip install --upgrade pip setuptools wheel
-  python3 -m pip install -r requirements-android.txt
+  if [ ! -d ".venv-android" ]; then
+    python3 -m venv .venv-android
+  fi
+  .venv-android/bin/python -m pip install --upgrade pip setuptools wheel
+  .venv-android/bin/python -m pip install -r requirements-android.txt
 fi
 
 # 4. Create default Android .env if not exists

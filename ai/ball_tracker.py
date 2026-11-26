@@ -477,6 +477,11 @@ class CameraReader:
         cfg = self.config
         ctype = str(cfg.get("camera_type") or "network").lower()
         if ctype in ("android", "phone"):
+            # Minimize FFmpeg/OpenCV internal buffering for low-latency phone loopback
+            if not os.environ.get("OPENCV_FFMPEG_CAPTURE_OPTIONS"):
+                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+                    "fflags;nobuffer|flags;low_delay|rtsp_transport;tcp|stimeout;3000000|rw_timeout;3000000"
+                )
             urls = []
             if cfg.get("rtsp_url"):
                 urls.append(str(cfg.get("rtsp_url")).strip())
@@ -488,9 +493,31 @@ class CameraReader:
             for url in urls:
                 try:
                     log(f"Opening Android camera stream: {url}")
-                    cap = cv2.VideoCapture(url)
+                    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+                    if not cap.isOpened():
+                        self._release_capture(cap)
+                        cap = cv2.VideoCapture(url)
+                    try:
+                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    except Exception:
+                        pass
                     if cap.isOpened() and self._read_test_frames(cap, count=2, timeout=2.5):
                         log(f"Android camera connected successfully via {url}")
+                        return cap
+                    self._release_capture(cap)
+                except Exception:
+                    pass
+            # Fallback: try V4L2 /dev/video* (works on rooted Android or USB-OTG UVC cameras)
+            import glob as _glob
+            for dev in sorted(_glob.glob("/dev/video*")):
+                try:
+                    cap = cv2.VideoCapture(dev, cv2.CAP_V4L2)
+                    try:
+                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    except Exception:
+                        pass
+                    if cap.isOpened() and self._read_test_frames(cap, count=2, timeout=1.5):
+                        log(f"Android V4L2 camera connected via {dev}")
                         return cap
                     self._release_capture(cap)
                 except Exception:
@@ -981,6 +1008,43 @@ def main():
     camera_fps_ema = 0.0
     last_camera_frame_time = None
 
+    # Background inference worker keeps live camera preview & broadcast at full
+    # camera FPS even when CPU YOLO inference takes 150-400ms (e.g. on Android).
+    inf_lock = threading.Lock()
+    inf_event = threading.Event()
+    inf_pending = {"frame": None, "frame_time": 0.0}
+    inf_result = {"detections": [], "elapsed": 0.0, "latency": 0.0, "seq": 0}
+    inf_stop = False
+    last_inf_seq = 0
+
+    def _inference_loop():
+        while not inf_stop:
+            if not inf_event.wait(timeout=0.2):
+                continue
+            inf_event.clear()
+            with inf_lock:
+                f_copy = inf_pending["frame"]
+                f_time = inf_pending["frame_time"]
+                inf_pending["frame"] = None
+            if f_copy is None:
+                continue
+            t0 = time.perf_counter()
+            try:
+                dets = detector.detect(f_copy)
+            except Exception as e:
+                log(f"Inference error: {e}")
+                dets = []
+            el = time.perf_counter() - t0
+            lat = max(0.0, time.time() - f_time) if f_time else el
+            with inf_lock:
+                inf_result["detections"] = dets
+                inf_result["elapsed"] = el
+                inf_result["latency"] = lat
+                inf_result["seq"] += 1
+
+    inf_thread = threading.Thread(target=_inference_loop, daemon=True)
+    inf_thread.start()
+
     log("System ready — AI process is idle until Start Tracking is pressed")
     try:
         while True:
@@ -1048,18 +1112,20 @@ def main():
             if detector.ready and state["tracking"]:
                 inference_due = (now - last_inference_at) >= (1.0 / max(1, AI_MAX_FPS))
                 if inference_due and frame_number % max(1, INFERENCE_EVERY_N_FRAMES) == 0:
-                    last_inference_at = now
-                    t0 = time.perf_counter()
-                    try:
-                        last_detections = detector.detect(frame)
-                    except Exception as e:
-                        log(f"Inference error: {e}")
-                        last_detections = []
-                    el = time.perf_counter() - t0
-                    inference_times.append(el)
-                    latencies.append(time.time() - camera.frame_time)
-                    del inference_times[:-100]
-                    del latencies[:-100]
+                    with inf_lock:
+                        if inf_pending["frame"] is None:
+                            inf_pending["frame"] = frame.copy()
+                            inf_pending["frame_time"] = camera.frame_time
+                            last_inference_at = now
+                            inf_event.set()
+                with inf_lock:
+                    if inf_result["seq"] != last_inf_seq:
+                        last_inf_seq = inf_result["seq"]
+                        last_detections = inf_result["detections"]
+                        inference_times.append(inf_result["elapsed"])
+                        latencies.append(inf_result["latency"])
+                        del inference_times[:-100]
+                        del latencies[:-100]
                 detections = last_detections
             else:
                 detections = []
@@ -1142,6 +1208,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        inf_stop = True
+        inf_event.set()
         print()
         log("Stopping...")
         controller.close()

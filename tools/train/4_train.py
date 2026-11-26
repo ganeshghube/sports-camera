@@ -74,7 +74,10 @@ def main():
 
     is_android = (
         os.path.exists("/data/data/com.termux")
+        or os.path.exists("/data/data/tech.ula")
+        or os.path.exists("/system/build.prop")
         or "ANDROID_ROOT" in os.environ
+        or "ANDROID_DATA" in os.environ
         or "TERMUX_VERSION" in os.environ
         or getattr(sys, "platform", "") == "android"
     )

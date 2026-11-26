@@ -29,7 +29,14 @@ elif [ "$USE_PROOT" -eq 1 ]; then
     echo "===================================================================="
     bash tools/setup_android.sh
   fi
-elif ! python -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
+elif [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
+  if ! "${ROOT_DIR}/.venv-android/bin/python" -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "===================================================================="
+    echo "🚀 Missing dependencies detected! Auto-installing..."
+    echo "===================================================================="
+    bash tools/setup_android.sh
+  fi
+elif ! python3 -c "import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
   echo "===================================================================="
   echo "🚀 First-time run or missing dependencies detected! Auto-installing..."
   echo "===================================================================="
@@ -121,6 +128,9 @@ fi
 
 if [ "$USE_PROOT" -eq 1 ]; then
   exec proot-distro login ubuntu --shared-tmp --bind "${ROOT_DIR}:${ROOT_DIR}" -- bash -c "cd '${ROOT_DIR}' && export HOST='${HOST}' PORT='${PORT}' TERMUX_VERSION='proot' && exec '${ROOT_DIR}/.venv-android/bin/python' run.py"
+elif [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
+  export TERMUX_VERSION="${TERMUX_VERSION:-userland}"
+  exec "${ROOT_DIR}/.venv-android/bin/python" run.py
 else
-  exec python run.py
+  exec python3 run.py
 fi
