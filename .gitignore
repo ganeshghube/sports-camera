@@ -6,3 +6,4 @@ recordings/
 *.db-shm
 __pycache__/
 models/*_openvino_model/
+runs/
