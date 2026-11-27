@@ -57,6 +57,7 @@
   <div class="row" style="margin-top:10px">
    <button class="btn" id="pauseBtn" disabled>⏸ Pause Recording</button>
    <button class="btn" id="overlayBtn">👁 Score Overlay</button>
+   <button class="btn" id="zoomSpeedBtn" title="Adjust Auto Zoom speed">⚡ Zoom Speed: Normal (1.0x)</button>
    <button class="btn" id="restartCamBtn" title="Reset camera capture without leaving this page">🔄 Reset Camera</button>
    <span class="hint" id="message">Ready</span>
    <span class="grow"></span>
@@ -104,6 +105,19 @@
   let detection=null, lastFrameW=0, lastFrameH=0, lastDetectionAt=0;
   let outOfPitchSince=0;
   let lastZoomTime=performance.now();
+  const zoomSpeedModes = [
+    { label: "Slow (0.6x)", mult: 0.6 },
+    { label: "Normal (1.0x)", mult: 1.0 },
+    { label: "Fast (1.5x)", mult: 1.5 },
+    { label: "Quick (2.0x)", mult: 2.0 },
+  ];
+  let zoomSpeedIdx = Math.max(0, Math.min(zoomSpeedModes.length - 1, Number(localStorage.getItem("cl_zoom_speed_idx") ?? 1)));
+  function renderZoomSpeedBtn(){
+    const m = zoomSpeedModes[zoomSpeedIdx];
+    const b = $("zoomSpeedBtn");
+    if(b) b.textContent = "⚡ Zoom Speed: " + m.label;
+  }
+  renderZoomSpeedBtn();
   const tc=$("trackCanvas"), tctx=tc.getContext("2d");
 
   function setAutoZoomUI(on){
@@ -179,19 +193,20 @@
     const maxZoomRate = 0.15;
     const maxPanRate = 8.4;
     const ease = 0.021;
+    const spd = zoomSpeedModes[zoomSpeedIdx].mult;
 
-    const maxZoomStep = maxZoomRate * dt;
+    const maxZoomStep = maxZoomRate * spd * dt;
     const zoomDiff = targetZoom - currentZoom;
-    const zoomStep = Math.sign(zoomDiff) * Math.min(Math.abs(zoomDiff) * (ease * 60 * dt), maxZoomStep);
+    const zoomStep = Math.sign(zoomDiff) * Math.min(Math.abs(zoomDiff) * (ease * spd * 60 * dt), maxZoomStep);
     currentZoom += zoomStep;
 
-    const maxPanStep = maxPanRate * dt;
+    const maxPanStep = maxPanRate * spd * dt;
     const panDiffX = targetOriginX - currentOriginX;
-    const panStepX = Math.sign(panDiffX) * Math.min(Math.abs(panDiffX) * (ease * 60 * dt), maxPanStep);
+    const panStepX = Math.sign(panDiffX) * Math.min(Math.abs(panDiffX) * (ease * spd * 60 * dt), maxPanStep);
     currentOriginX += panStepX;
 
     const panDiffY = targetOriginY - currentOriginY;
-    const panStepY = Math.sign(panDiffY) * Math.min(Math.abs(panDiffY) * (ease * 60 * dt), maxPanStep);
+    const panStepY = Math.sign(panDiffY) * Math.min(Math.abs(panDiffY) * (ease * spd * 60 * dt), maxPanStep);
     currentOriginY += panStepY;
 
     const vp = $("previewViewport");
@@ -342,6 +357,13 @@
   }catch(e){show(e.message,true)}};
 
   $("overlayBtn").onclick=()=>{overlay=!overlay;$("scoreOverlay").style.display=overlay?"":"none";$("overlayBtn").textContent=overlay?"👁 Score Overlay":"🚫 Score Overlay"};
+
+  $("zoomSpeedBtn").onclick=()=>{
+    zoomSpeedIdx = (zoomSpeedIdx + 1) % zoomSpeedModes.length;
+    localStorage.setItem("cl_zoom_speed_idx", String(zoomSpeedIdx));
+    renderZoomSpeedBtn();
+    show("Auto Zoom speed set to " + zoomSpeedModes[zoomSpeedIdx].label);
+  };
 
   async function poll(){
     try{

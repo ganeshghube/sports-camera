@@ -221,6 +221,25 @@ app = FastAPI(title="Cricket Live")
 system_manager = SystemManager(ROOT, store, log)
 
 
+@app.on_event("startup")
+async def _install_windows_asyncio_filter():
+    if os.name != "nt":
+        return
+    loop = asyncio.get_running_loop()
+    prev = loop.get_exception_handler()
+
+    def _handler(lp, context):
+        exc = context.get("exception")
+        if isinstance(exc, ConnectionResetError) and "_call_connection_lost" in repr(context.get("handle", "")):
+            return
+        if prev is not None:
+            prev(lp, context)
+        else:
+            lp.default_exception_handler(context)
+
+    loop.set_exception_handler(_handler)
+
+
 # ------------------------------------------------------------------ auth
 def current_user(cl_session: str = Cookie(default=None)):
     return store.session_user(cl_session)

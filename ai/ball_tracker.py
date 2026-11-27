@@ -238,10 +238,26 @@ class Detector:
         return []
 
 
-def select_best_ball(detections):
+def select_best_ball(detections, frame_w=None, frame_h=None):
     if not detections:
         return None
-    best = max(detections, key=lambda x: x["confidence"])
+    candidates = detections
+    if frame_w and frame_h:
+        max_w = frame_w * 0.12
+        max_h = frame_h * 0.15
+        filtered = []
+        for d in detections:
+            x1, y1, x2, y2 = d["box"]
+            bw, bh = abs(x2 - x1), abs(y2 - y1)
+            if bw <= 1 or bh <= 1:
+                continue
+            ratio = bw / bh
+            if bw <= max_w and bh <= max_h and 0.35 <= ratio <= 2.8:
+                filtered.append(d)
+        candidates = filtered
+    if not candidates:
+        return None
+    best = max(candidates, key=lambda x: x["confidence"])
     x1, y1, x2, y2 = best["box"]
     return {"x": (x1 + x2) / 2.0, "y": (y1 + y2) / 2.0,
             "confidence": best["confidence"], "box": best["box"]}
@@ -1133,7 +1149,7 @@ def main():
             else:
                 detections = []
 
-            ball = select_best_ball(detections)
+            ball = select_best_ball(detections, w, h)
             tracker.update(ball)
             if ball is not None:
                 last_detection_ts = time.time()
