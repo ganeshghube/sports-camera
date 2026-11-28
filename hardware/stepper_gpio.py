@@ -15,6 +15,8 @@ class GpioStepperPanTilt:
         self.tilt_step,self.tilt_dir=int(tilt_step),int(tilt_dir)
         self.max_pan_sps=int(max_pan_sps); self.max_tilt_sps=int(max_tilt_sps)
         self.pan=0; self.tilt=0; self.running=True
+        self.pos_pan=0; self.pos_tilt=0
+        self.home_pan=0; self.home_tilt=0
         self._lock=threading.Lock()
         self._gpio=None
         try:
@@ -51,14 +53,37 @@ class GpioStepperPanTilt:
                 if now>=next_pan:
                     self.pd.value=1 if pan>0 else 0
                     self.ps.on(); time.sleep(min(0.00045,interval*0.35)); self.ps.off()
+                    with self._lock: self.pos_pan += (1 if pan > 0 else -1)
                     next_pan=now+interval
             if self._gpio and tilt:
                 interval=1.0/max(1,abs(tilt))
                 if now>=next_tilt:
                     self.td.value=1 if tilt>0 else 0
                     self.ts.on(); time.sleep(min(0.00045,interval*0.35)); self.ts.off()
+                    with self._lock: self.pos_tilt += (1 if tilt > 0 else -1)
                     next_tilt=now+interval
             time.sleep(0.0005)
+
+    def return_to_home(self):
+        with self._lock:
+            pan_err = self.pos_pan - self.home_pan
+            tilt_err = self.pos_tilt - self.home_tilt
+            if abs(pan_err) < 6 and abs(tilt_err) < 6:
+                self.pan = 0
+                self.tilt = 0
+                return True
+            self.pan = -int(max(-self.max_pan_sps, min(self.max_pan_sps, pan_err * 2.5)))
+            self.tilt = -int(max(-self.max_tilt_sps, min(self.max_tilt_sps, tilt_err * 2.5)))
+            return False
+
+    def set_home(self):
+        with self._lock:
+            self.pos_pan = 0
+            self.pos_tilt = 0
+            self.home_pan = 0
+            self.home_tilt = 0
+            self.pan = 0
+            self.tilt = 0
 
     def stop(self):
         self.send(0,0)

@@ -150,7 +150,7 @@ def build_router(store, require_user, current_user, log, root: Path,
                 else:
                     if not zoom_state.get("out_of_pitch_since"):
                         zoom_state["out_of_pitch_since"] = now
-                    if (now - zoom_state["out_of_pitch_since"]) >= 2.0 or zoom_state["current_zoom"] > 1.08:
+                    if (now - zoom_state["out_of_pitch_since"]) >= 0.20 or zoom_state["current_zoom"] > 1.08:
                         zoom_active = True
 
                 if zoom_active:
@@ -168,22 +168,22 @@ def build_router(store, require_user, current_user, log, root: Path,
                 target_cx = 0.5
                 target_cy = 0.5
 
-            # Slew-rate limited cinematic zoom matching preview.html & broadcast.html (40% slower)
+            # Fast, agile zoom & pan matching preview.html
             dt = max(0.001, min(now - float(zoom_state.get("last_time", now) or now), 0.1))
             zoom_state["last_time"] = now
 
-            max_zoom_step = 0.15 * dt
+            max_zoom_step = 0.75 * dt
             zoom_diff = target_zoom - zoom_state["current_zoom"]
-            zoom_step = (1.0 if zoom_diff >= 0 else -1.0) * min(abs(zoom_diff) * (0.021 * 60 * dt), max_zoom_step)
+            zoom_step = (1.0 if zoom_diff >= 0 else -1.0) * min(abs(zoom_diff) * (0.075 * 60 * dt), max_zoom_step)
             zoom_state["current_zoom"] += zoom_step
 
-            max_pan_step = 0.084 * dt
+            max_pan_step = 0.45 * dt
             cx_diff = target_cx - zoom_state["current_cx"]
-            cx_step = (1.0 if cx_diff >= 0 else -1.0) * min(abs(cx_diff) * (0.021 * 60 * dt), max_pan_step)
+            cx_step = (1.0 if cx_diff >= 0 else -1.0) * min(abs(cx_diff) * (0.075 * 60 * dt), max_pan_step)
             zoom_state["current_cx"] += cx_step
 
             cy_diff = target_cy - zoom_state["current_cy"]
-            cy_step = (1.0 if cy_diff >= 0 else -1.0) * min(abs(cy_diff) * (0.021 * 60 * dt), max_pan_step)
+            cy_step = (1.0 if cy_diff >= 0 else -1.0) * min(abs(cy_diff) * (0.075 * 60 * dt), max_pan_step)
             zoom_state["current_cy"] += cy_step
 
             zoomed = False
@@ -1173,11 +1173,28 @@ def build_router(store, require_user, current_user, log, root: Path,
 
         def stream():
             last = None
+            empty_cycles = 0
             while True:
                 frame = frame_getter()
                 if not frame:
+                    empty_cycles += 1
+                    # If camera is running but no physical device produced frames, output a live test pattern
+                    if empty_cycles > 15:
+                        import cv2, numpy as np
+                        st = camera_status_getter() or {}
+                        err_text = st.get("error") or "NO SIGNAL - CAMERA SEARCHING"
+                        test_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+                        test_img[:, :] = (26, 37, 53)
+                        cv2.rectangle(test_img, (60, 60), (1220, 660), (45, 65, 90), 2)
+                        cv2.putText(test_img, "CRICKET LIVE - CAMERA FEED", (120, 260), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+                        cv2.putText(test_img, str(err_text)[:55], (120, 340), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 255, 136), 2)
+                        cv2.putText(test_img, time.strftime("%H:%M:%S") + " | Plug in USB webcam or configure IP Webcam/RTSP", (120, 420), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 195, 210), 1)
+                        ok, buf = cv2.imencode(".jpg", test_img, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+                        if ok:
+                            yield b"--frame\r\nContent-Type: image/jpeg\r\nCache-Control: no-cache\r\n\r\n" + buf.tobytes() + b"\r\n"
                     time.sleep(0.08)
                     continue
+                empty_cycles = 0
                 if frame == last:
                     time.sleep(0.02)
                     continue

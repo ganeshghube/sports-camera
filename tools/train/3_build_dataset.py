@@ -36,6 +36,8 @@ def main():
     ap.add_argument("--seed",      type=int,   default=42)
     ap.add_argument("--only-labeled", action="store_true",
                     help="Skip images that have no matching label file (default: include as negatives)")
+    ap.add_argument("--exclude-file", default=None,
+                    help="Optional JSON list of image filenames to skip (e.g. unapproved auto-labels)")
     args = ap.parse_args()
 
     frames_dir = Path(args.frames)
@@ -49,7 +51,18 @@ def main():
                 shutil.rmtree(d, ignore_errors=True)
             d.mkdir(parents=True, exist_ok=True)
 
-    images = sorted(p for p in frames_dir.rglob("*") if p.suffix.lower() in IMG_EXTS)
+    exclude_names = set()
+    if args.exclude_file and Path(args.exclude_file).exists():
+        import json as _json
+        try:
+            exclude_names = set(_json.loads(Path(args.exclude_file).read_text(encoding="utf-8")) or [])
+        except Exception:
+            exclude_names = set()
+
+    images = sorted(
+        p for p in frames_dir.rglob("*")
+        if p.suffix.lower() in IMG_EXTS and p.name not in exclude_names
+    )
     if not images:
         sys.exit(f"No images found in {frames_dir}")
 

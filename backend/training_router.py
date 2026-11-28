@@ -45,6 +45,7 @@ ROOT        = Path(__file__).resolve().parent.parent
 TRAIN_DIR   = ROOT / "data" / "training_frames"
 IMAGES_DIR  = TRAIN_DIR / "images"
 LABELS_DIR  = TRAIN_DIR / "labels"
+REVIEW_FILE = TRAIN_DIR / "needs_review.json"
 DATASET_DIR = ROOT / "data" / "training_dataset"
 MODELS_DIR  = ROOT / "models"
 BACKUP_DIR  = MODELS_DIR / "backup"
@@ -63,6 +64,41 @@ _state: dict = {
 }
 _proc: subprocess.Popen | None = None
 _lock = threading.Lock()
+_auto_label_skipped: set[str] = set()
+_rejected_cache: dict[str, str] = {}
+
+
+def _load_review_set() -> set[str]:
+    if REVIEW_FILE.exists():
+        try:
+            return set(json.loads(REVIEW_FILE.read_text(encoding="utf-8")) or [])
+        except Exception:
+            return set()
+    return set()
+
+
+def _save_review_set(items: set[str]):
+    REVIEW_FILE.parent.mkdir(parents=True, exist_ok=True)
+    REVIEW_FILE.write_text(json.dumps(sorted(items), indent=2), encoding="utf-8")
+
+
+def _mark_needs_review(names: list[str] | set[str]):
+    with _lock:
+        s = _load_review_set()
+        s.update(names)
+        _save_review_set(s)
+
+
+def _mark_approved(names: list[str] | set[str]):
+    with _lock:
+        s = _load_review_set()
+        changed = False
+        for n in names:
+            if n in s:
+                s.discard(n)
+                changed = True
+        if changed:
+            _save_review_set(s)
 
 _auto_state: dict = {
     "enabled": True,
@@ -198,6 +234,7 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                                 name = f"auto_{int(now * 1000)}"
                                 (IMAGES_DIR / f"{name}.jpg").write_bytes(frame)
                                 (LABELS_DIR / f"{name}.txt").write_text(f"0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n", encoding="utf-8")
+                                _mark_needs_review([f"{name}.jpg"])
                                 _auto_state["last_harvest_pos"] = now
                                 _auto_state["harvested_session"] += 1
                                 _auto_state["total_harvested"] += 1
@@ -228,7 +265,7 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
         threading.Thread(target=_harvester_loop, daemon=True, name="auto-harvester").start()
 
     # ── Pipeline Worker (Used by both manual and auto training) ────────────────
-    def _start_pipeline_worker(epochs=30, batch=8, auto_deploy=False, camera_control=None):
+    def _start_pipeline_worker(epochs=30, batch=8, auto_deploy=False, camera_control=None, device="auto"):
         global _proc
         _auto_state["is_training"] = True
         _state.update({
@@ -251,13 +288,14 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                 _state["phase"] = "building dataset"
                 _state["progress"] = 5
 
-                # Step A: build dataset
+                # Step A: build dataset (excludes unapproved auto-labels in needs_review.json)
                 r = subprocess.run(
                     [python, str(ROOT / "tools/train/3_build_dataset.py"),
                      "--frames", str(IMAGES_DIR),
                      "--labels", str(LABELS_DIR),
                      "--out", str(DATASET_DIR),
-                     "--val-split", "0.15"],
+                     "--val-split", "0.15",
+                     "--exclude-file", str(REVIEW_FILE)],
                     capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT)
                 )
                 _log(r.stdout, r.stderr)
@@ -273,7 +311,8 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                 base_model = ROOT / "models" / "best.pt"
                 eff_batch = min(batch, 4) if len(all_imgs) < 40 else batch
                 eff_freeze = 0 if len(all_imgs) < 35 else 4
-                _log(f"Fine-tuning YOLO weights ({epochs} epochs, batch {eff_batch}, freeze={eff_freeze}, starting from {base_model.name})...")
+                eff_imgsz = "416" if (len(all_imgs) > 200 and str(device or "auto").lower() in ("auto", "cpu", "xpu:0")) else "640"
+                _log(f"Fine-tuning YOLO weights ({epochs} epochs, batch {eff_batch}, imgsz={eff_imgsz}, freeze={eff_freeze}, starting from {base_model.name})...")
                 _log("-" * 55)
 
                 run_name = f"cricket_train_{int(time.time())}"
@@ -283,6 +322,8 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                      "--model", str(base_model),
                      "--epochs", str(epochs),
                      "--batch", str(eff_batch),
+                     "--imgsz", eff_imgsz,
+                     "--device", str(device or "auto"),
                      "--name", run_name,
                      "--lr0", "0.002",
                      "--freeze", str(eff_freeze),
@@ -395,8 +436,11 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
     # ── list frames ───────────────────────────────────────────────────────────
     @router.get("/frames")
     def list_frames(_=auth_dep):
+        review_set = _load_review_set()
         frames = []
-        for img in sorted(IMAGES_DIR.glob("*.jpg")):
+        for img in sorted(IMAGES_DIR.iterdir()):
+            if img.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp", ".bmp"):
+                continue
             lbl = LABELS_DIR / (img.stem + ".txt")
             has_lbl = lbl.exists()
             has_ball = has_lbl and bool(lbl.read_text(encoding="utf-8").strip())
@@ -406,13 +450,16 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                 "labeled": has_ball,
                 "no_ball": no_ball,
                 "pending": not has_lbl,
+                "needs_review": has_lbl and (img.name in review_set),
             })
         total = len(frames)
         labeled = sum(1 for f in frames if f["labeled"])
         no_ball = sum(1 for f in frames if f["no_ball"])
+        needs_review = sum(1 for f in frames if f["needs_review"])
         return {"frames": frames, "total": total,
                 "labeled": labeled, "no_ball": no_ball,
-                "pending": total - labeled - no_ball}
+                "pending": total - labeled - no_ball,
+                "needs_review": needs_review}
 
     # ── serve image ───────────────────────────────────────────────────────────
     @router.get("/frames/{name}/image")
@@ -452,7 +499,38 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
             lbl.write_text("\n".join(lines) + "\n", encoding="utf-8")
         else:
             lbl.write_text("", encoding="utf-8")
+        _mark_approved([Path(name).name])
         return {"saved": True}
+
+    @router.post("/frames/approve-all")
+    def approve_all_frames(_=auth_dep):
+        s = _load_review_set()
+        cnt = len(s)
+        _save_review_set(set())
+        _log(f"✅ Approved {cnt} auto-labeled frame(s) for training")
+        return {"approved": cnt}
+
+    @router.post("/frames/{name}/approve")
+    def approve_frame(name: str, _=auth_dep):
+        fname = Path(name).name
+        lbl = LABELS_DIR / (Path(fname).stem + ".txt")
+        if not lbl.exists() and fname in _rejected_cache:
+            lbl.write_text(_rejected_cache.pop(fname), encoding="utf-8")
+        _mark_approved([fname])
+        _auto_label_skipped.discard(fname)
+        return {"approved": True, "name": fname}
+
+    @router.post("/frames/{name}/reject")
+    def reject_frame(name: str, _=auth_dep):
+        """Reject a label: cache it for undo, remove its .txt label and review flag."""
+        fname = Path(name).name
+        lbl = LABELS_DIR / (Path(fname).stem + ".txt")
+        if lbl.exists():
+            _rejected_cache[fname] = lbl.read_text(encoding="utf-8")
+            lbl.unlink(missing_ok=True)
+        _mark_approved([fname])
+        _auto_label_skipped.add(fname)
+        return {"rejected": True, "name": fname}
 
     # ── delete frame ──────────────────────────────────────────────────────────
     @router.delete("/frames/{name}")
@@ -460,12 +538,48 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
         stem = Path(name).stem
         (IMAGES_DIR / Path(name).name).unlink(missing_ok=True)
         (LABELS_DIR / (stem + ".txt")).unlink(missing_ok=True)
+        _mark_approved([Path(name).name])
         return {"deleted": True}
 
     # ── training status ───────────────────────────────────────────────────────
     @router.get("/status")
     def status(_=auth_dep):
-        return _state
+        st = dict(_state)
+        # Check disk for latest trained run so UI always knows about ready models
+        runs_dir = ROOT / "runs" / "detect"
+        if runs_dir.exists():
+            candidates = sorted(
+                runs_dir.glob("*/weights/best.pt"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if candidates:
+                latest_best = candidates[0]
+                run_dir = latest_best.parent.parent
+                st["latest_run"] = run_dir.name
+                st["latest_run_time"] = latest_best.stat().st_mtime
+                st["has_trained_model"] = True
+                if not st.get("best_model"):
+                    st["best_model"] = str(latest_best)
+                # Check for results.csv or metrics if not set
+                if not st.get("metrics") or not st["metrics"].get("mAP50"):
+                    res_csv = run_dir / "results.csv"
+                    if res_csv.exists():
+                        try:
+                            import csv as _csv
+                            with res_csv.open("r", encoding="utf-8") as cf:
+                                rows = list(_csv.DictReader(cf))
+                            for row in rows:
+                                clean = {k.strip(): v.strip() for k, v in row.items() if k}
+                                m50 = float(clean.get("metrics/mAP50(B)", -1))
+                                m95 = float(clean.get("metrics/mAP50-95(B)", -1))
+                                if m50 >= 0:
+                                    st.setdefault("metrics", {})["mAP50"] = round(m50, 4)
+                                    if m95 >= 0:
+                                        st["metrics"]["mAP50_95"] = round(m95, 4)
+                        except Exception:
+                            pass
+        return st
 
     # ── start manual training ─────────────────────────────────────────────────
     @router.post("/run")
@@ -476,6 +590,7 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
         body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
         epochs = int(body.get("epochs", 30))
         batch = int(body.get("batch", 8))
+        device = str(body.get("device", "auto") or "auto")
 
         all_imgs = list(IMAGES_DIR.glob("*.jpg"))
         labeled = [f for f in all_imgs
@@ -486,8 +601,8 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
                 f"Need at least 5 frames with ball labels (have {len(labeled)}). "
                 "Capture and label more frames first, or use camera to auto-harvest.")
 
-        _start_pipeline_worker(epochs=epochs, batch=batch, auto_deploy=False, camera_control=camera_control)
-        return {"started": True, "epochs": epochs, "batch": batch}
+        _start_pipeline_worker(epochs=epochs, batch=batch, auto_deploy=False, camera_control=camera_control, device=device)
+        return {"started": True, "epochs": epochs, "batch": batch, "device": device}
 
     # ── stop training ─────────────────────────────────────────────────────────
     @router.post("/stop")
@@ -506,6 +621,17 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
     def deploy(_=auth_dep):
         best = _state.get("best_model")
         if not best or not Path(best).exists():
+            # Fallback: find the newest trained best.pt on disk (survives app restarts)
+            runs_dir = ROOT / "runs" / "detect"
+            candidates = sorted(
+                runs_dir.glob("*/weights/best.pt"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            ) if runs_dir.exists() else []
+            if candidates:
+                best = str(candidates[0])
+                _state["best_model"] = best
+        if not best or not Path(best).exists():
             raise HTTPException(400, "No trained model ready. Run training first.")
 
         _log("Deploying trained model to models/best.pt...")
@@ -521,7 +647,12 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
 
         _notify_tracker(camera_control)
         _record_model_history(best, _state.get("metrics", {}))
-        return {"deployed": True, "hot_reloaded": True}
+        return {
+            "deployed": True,
+            "hot_reloaded": True,
+            "model": best,
+            "log": (r.stdout or "") + ("\n" + r.stderr if r.stderr else "")
+        }
 
     @router.post("/reload-model")
     def reload_model(_=auth_dep):
@@ -650,6 +781,21 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
         _log(f"🗑️ Deleted {removed} auto-harvested frame(s)")
         return {"deleted": True, "count": removed}
 
+    @router.delete("/frames-all")
+    def delete_all_frames(_=auth_dep):
+        removed = 0
+        for img in list(IMAGES_DIR.iterdir()):
+            if img.is_file():
+                img.unlink(missing_ok=True)
+                removed += 1
+        for lbl in list(LABELS_DIR.glob("*.txt")):
+            lbl.unlink(missing_ok=True)
+        _save_review_set(set())
+        _auto_label_skipped.clear()
+        _auto_state["harvested_session"] = 0
+        _log(f"🗑️ Cleared all {removed} training frame(s)")
+        return {"deleted": True, "count": removed}
+
     @router.post("/models/upload")
     async def upload_model(request: Request, filename: str = "best.pt", _=auth_dep):
         """Upload a ready-made YOLOv8 .pt model, backup current model, and hot-reload."""
@@ -677,5 +823,187 @@ def build_router(auth_dep, frame_getter=None, camera_control=None, store=None, t
         _record_model_history(f"uploaded:{Path(filename).name}", {})
         _log(f"⬆️ Uploaded & activated custom model ({Path(filename).name}, {len(body) // (1024 * 1024)} MB)")
         return {"uploaded": True, "filename": Path(filename).name, "bytes": len(body)}
+
+    @router.post("/frames/upload")
+    async def upload_frame(request: Request, filename: str = "upload.jpg", _=auth_dep):
+        """Upload an image file directly into training_frames/images for batch labeling."""
+        body = await request.body()
+        if len(body) < 512:
+            raise HTTPException(400, "Uploaded image is empty or invalid.")
+        if len(body) > 25 * 1024 * 1024:
+            raise HTTPException(413, "Image exceeds 25 MB limit.")
+        ext = Path(filename).suffix.lower()
+        if ext not in (".jpg", ".jpeg", ".png", ".webp", ".bmp"):
+            ext = ".jpg"
+        IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        name = f"frame_{int(time.time() * 1000)}_{abs(hash(filename)) % 10000}{ext}"
+        (IMAGES_DIR / name).write_bytes(body)
+        return {"name": name}
+
+    @router.post("/auto-label")
+    def auto_label_frames(body: dict | None = None, _=auth_dep):
+        """Auto-label up to 30 pending frames (or a single frame) with low CPU/RAM."""
+        import gc
+        target_name = body.get("frame") if isinstance(body, dict) else None
+        limit = max(1, min(50, int((body or {}).get("limit", 30)))) if isinstance(body, dict) else 30
+
+        model_path = MODELS_DIR / "best.pt"
+        if not model_path.exists():
+            raise HTTPException(404, "models/best.pt not found")
+
+        remaining = 0
+        if target_name:
+            if "/" in target_name or "\\" in target_name or ".." in target_name:
+                raise HTTPException(400, "Invalid frame name")
+            p = IMAGES_DIR / target_name
+            if not p.exists():
+                raise HTTPException(404, "Frame not found")
+            targets = [p]
+        else:
+            all_pending = [
+                p for p in sorted(IMAGES_DIR.iterdir())
+                if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+                and not (LABELS_DIR / f"{p.stem}.txt").exists()
+                and p.name not in _auto_label_skipped
+            ]
+            if not all_pending and _auto_label_skipped:
+                _auto_label_skipped.clear()
+                all_pending = [
+                    p for p in sorted(IMAGES_DIR.iterdir())
+                    if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+                    and not (LABELS_DIR / f"{p.stem}.txt").exists()
+                ]
+            targets = all_pending[:limit]
+            remaining = max(0, len(all_pending) - len(targets))
+
+        if not targets:
+            return {"checked": 0, "labeled": 0, "skipped": 0, "remaining": 0}
+
+        from ultralytics import YOLO
+        model = YOLO(str(model_path))
+        labeled_count = 0
+        skipped_count = 0
+        first_box = None
+
+        for img_path in targets:
+            # imgsz=416 uses ~2.3x less CPU/RAM than 640; conf=0.22 + review queue catches more balls
+            res = model.predict(str(img_path), imgsz=416, conf=0.22, verbose=False, device="cpu")
+            best_box = None
+            best_conf = 0.0
+            if res and len(res) > 0:
+                ih, iw = res[0].orig_shape[:2]
+                for b in res[0].boxes:
+                    conf = float(b.conf[0])
+                    x1, y1, x2, y2 = [float(v) for v in b.xyxy[0]]
+                    bw, bh = abs(x2 - x1) / max(1, iw), abs(y2 - y1) / max(1, ih)
+                    if bw <= 0 or bh <= 0:
+                        continue
+                    ratio = (bw * iw) / max(1e-6, (bh * ih))
+                    if bw <= 0.45 and bh <= 0.45 and 0.35 <= ratio <= 2.8 and conf > best_conf:
+                        best_conf = conf
+                        best_box = (
+                            max(0.001, min(0.999, ((x1 + x2) / 2.0) / iw)),
+                            max(0.001, min(0.999, ((y1 + y2) / 2.0) / ih)),
+                            max(0.002, min(0.999, bw)),
+                            max(0.002, min(0.999, bh)),
+                        )
+            if best_box is not None:
+                cx, cy, w, h = best_box
+                (LABELS_DIR / f"{img_path.stem}.txt").write_text(
+                    f"0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n", encoding="utf-8"
+                )
+                _mark_needs_review([img_path.name])
+                labeled_count += 1
+                if first_box is None:
+                    first_box = {"cx": cx, "cy": cy, "w": w, "h": h}
+            else:
+                if not target_name:
+                    _auto_label_skipped.add(img_path.name)
+                skipped_count += 1
+
+        del model
+        gc.collect()
+        _log(f"🤖 Auto-labeled {labeled_count}/{len(targets)} frame(s) ({remaining} pending left)")
+        return {"checked": len(targets), "labeled": labeled_count, "skipped": skipped_count, "remaining": remaining, "box": first_box}
+
+    @router.post("/video/import")
+    async def import_video_frames(request: Request, filename: str = "clip.mp4", max_frames: int = 40, _=auth_dep):
+        """Extract evenly-spaced frames from a cricket video and auto-label them."""
+        import tempfile
+        import cv2
+        body = await request.body()
+        if len(body) < 10_000:
+            raise HTTPException(400, "Uploaded video is empty or invalid.")
+        if len(body) > 400 * 1024 * 1024:
+            raise HTTPException(413, "Video exceeds 400 MB limit.")
+
+        max_frames = max(5, min(120, int(max_frames)))
+        ext = Path(filename).suffix.lower() or ".mp4"
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext)
+        os.close(tmp_fd)
+        extracted = []
+        try:
+            Path(tmp_path).write_bytes(body)
+            cap = cv2.VideoCapture(tmp_path)
+            if not cap.isOpened():
+                raise HTTPException(400, "Could not decode uploaded video file.")
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            step = max(1, total // max_frames) if total > max_frames else 1
+            IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+            idx = 0
+            while len(extracted) < max_frames:
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    break
+                if idx % step == 0:
+                    name = f"vid_{int(time.time() * 1000)}_{len(extracted):03d}.jpg"
+                    out_p = IMAGES_DIR / name
+                    okj, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+                    if okj:
+                        out_p.write_bytes(jpg.tobytes())
+                        extracted.append(out_p)
+                idx += 1
+            cap.release()
+        finally:
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        labeled_count = 0
+        model_path = MODELS_DIR / "best.pt"
+        if extracted and model_path.exists():
+            from ultralytics import YOLO
+            model = YOLO(str(model_path))
+            for img_path in extracted:
+                res = model.predict(str(img_path), imgsz=640, conf=0.35, verbose=False, device="cpu")
+                best_box, best_conf = None, 0.0
+                if res and len(res) > 0:
+                    ih, iw = res[0].orig_shape[:2]
+                    for b in res[0].boxes:
+                        conf = float(b.conf[0])
+                        x1, y1, x2, y2 = [float(v) for v in b.xyxy[0]]
+                        bw, bh = abs(x2 - x1) / max(1, iw), abs(y2 - y1) / max(1, ih)
+                        if bw <= 0 or bh <= 0:
+                            continue
+                        ratio = (bw * iw) / max(1e-6, (bh * ih))
+                        if bw <= 0.12 and bh <= 0.15 and 0.35 <= ratio <= 2.8 and conf > best_conf:
+                            best_conf = conf
+                            best_box = (
+                                max(0.001, min(0.999, ((x1 + x2) / 2.0) / iw)),
+                                max(0.001, min(0.999, ((y1 + y2) / 2.0) / ih)),
+                                max(0.002, min(0.999, bw)),
+                                max(0.002, min(0.999, bh)),
+                            )
+                if best_box is not None:
+                    cx, cy, w, h = best_box
+                    (LABELS_DIR / f"{img_path.stem}.txt").write_text(
+                        f"0 {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n", encoding="utf-8"
+                    )
+                    _mark_needs_review([img_path.name])
+                    labeled_count += 1
+
+        _log(f"🎬 Imported video ({Path(filename).name}): extracted {len(extracted)} frames, auto-labeled {labeled_count}")
+        return {"extracted": len(extracted), "labeled": labeled_count, "pending": len(extracted) - labeled_count}
 
     return router

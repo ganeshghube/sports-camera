@@ -32,23 +32,23 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
 @media(max-width:700px){.grid2{grid-template-columns:1fr;}}
 
 /* CARDS */
-.card{background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
-.card-hd{background:var(--navy);color:#fff;padding:8px 14px;border-radius:8px 8px 0 0;
-  font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
-  display:flex;align-items:center;justify-content:space-between;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 2px 8px rgba(15,23,42,.05);}
+.card-hd{background:var(--navy);color:#fff;padding:10px 14px;border-radius:10px 10px 0 0;
+  font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
 .card-bd{padding:14px;}
 
 /* BUTTONS */
-.btn{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:#fff;
-  font-size:12px;font-weight:600;cursor:pointer;transition:.12s;color:var(--text);}
-.btn:hover{background:#f0f4f8;}
+.btn{padding:8px 14px;border-radius:7px;border:1px solid var(--border);background:#fff;
+  font-size:12px;font-weight:600;cursor:pointer;transition:.12s;color:var(--text);display:inline-flex;align-items:center;gap:5px;}
+.btn:hover{background:#f0f4f8;border-color:#b8c4d0;}
 .btn.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
 .btn.primary:hover{background:var(--navy2);}
 .btn.green{background:var(--green);color:#fff;border-color:var(--green);}
-.btn.green:hover{opacity:.88;}
+.btn.green:hover{opacity:.9;}
 .btn.red{background:var(--red);color:#fff;border-color:var(--red);}
-.btn.red:hover{opacity:.88;}
-.btn.lg{padding:10px 20px;font-size:13px;}
+.btn.red:hover{opacity:.9;}
+.btn.lg{padding:10px 18px;font-size:13px;}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
 
 .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;
@@ -77,10 +77,11 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
 .thumb img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;}
 .thumb .tb{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);
   font-size:9px;font-weight:700;color:#fff;padding:2px 5px;text-transform:uppercase;letter-spacing:.5px;}
-.thumb .del{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;
-  background:rgba(196,30,58,.9);color:#fff;border:none;cursor:pointer;font-size:10px;
+.thumb .del{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;
+  background:rgba(196,30,58,.92);color:#fff;border:none;cursor:pointer;font-size:11px;
   display:none;align-items:center;justify-content:center;}
 .thumb:hover .del{display:flex;}
+@media(hover:none){.thumb .del{display:flex;}}
 
 /* ANNOTATION CANVAS */
 #annoWrap{position:relative;display:inline-block;max-width:100%;cursor:crosshair;}
@@ -156,6 +157,12 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
     </div>
     <div style="margin-left:auto" class="row">
       <span class="badge info" id="captureCount">0 frames</span>
+      <input type="file" id="batchUploadInput" accept=".jpg,.jpeg,.png,.webp,.bmp,image/*" multiple style="display:none" onchange="uploadBatchPhotos(this.files)">
+      <input type="file" id="folderUploadInput" webkitdirectory directory multiple style="display:none" onchange="uploadBatchPhotos(this.files)">
+      <input type="file" id="videoImportInput" accept="video/*" style="display:none" onchange="importVideoClip(this.files[0])">
+      <button class="btn" id="importVideoBtn" onclick="document.getElementById('videoImportInput').click()">🎬 Import Video</button>
+      <button class="btn" id="uploadPhotosBtn" onclick="document.getElementById('batchUploadInput').click()" title="Select multiple images (Ctrl+A / Shift+Click)">📤 Upload Photos</button>
+      <button class="btn" id="uploadFolderBtn" onclick="document.getElementById('folderUploadInput').click()" title="Upload an entire folder of images">📁 Upload Folder</button>
       <button class="btn primary lg" id="captureBtn" onclick="captureFrame()">📸 Capture Frame</button>
       <button class="btn lg" onclick="gotoStep(2)">Next: Label →</button>
     </div>
@@ -213,6 +220,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
     </div>
     <div style="margin-left:auto" class="row">
       <span class="badge ok" id="labelProgress">0 labeled</span>
+      <button class="btn" id="autoLabelAllBtn" onclick="autoLabelAll()">🤖 Auto-Label All Pending</button>
       <button class="btn" onclick="gotoStep(1)">← Back</button>
       <button class="btn primary lg" onclick="gotoStep(3)">Next: Train →</button>
     </div>
@@ -224,6 +232,9 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
       <div class="card-hd">
         <span id="annoTitle">Select a frame →</span>
         <div class="row" style="gap:6px">
+          <button class="btn" id="autoBoxOneBtn" onclick="autoLabelCurrent()" title="Auto-detect ball on this frame">🤖 Auto-Box</button>
+          <button class="btn" id="approveOneBtn" onclick="approveCurrent()" title="Approve (or restore rejected) label" disabled style="border-color:var(--green);color:var(--green)">👍 Approve</button>
+          <button class="btn" id="rejectOneBtn" onclick="rejectCurrent()" title="Reject label (undo anytime)" disabled style="border-color:var(--red);color:var(--red)">👎 Reject</button>
           <button class="btn" id="undoBtn" onclick="clearBox()" title="Clear box">✕ Clear</button>
           <button class="btn green" id="saveWithBall" onclick="saveLabel(true)" disabled>✅ Ball here</button>
           <button class="btn" id="saveNoBall" onclick="saveLabel(false)" disabled>⊘ No ball</button>
@@ -241,6 +252,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
           <span id="framePos" class="hint">— / —</span>
           <button class="btn" id="nextBtn" onclick="navFrame(1)">Next →</button>
         </div>
+        <div class="hint" style="margin-top:6px">Shortcuts: <b>S / Enter</b> Save Ball · <b>N</b> No Ball · <b>A</b> Approve · <b>R</b> Reject · <b>← / →</b> Prev / Next</div>
       </div>
     </div>
 
@@ -250,12 +262,15 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
       <div class="card-bd" style="padding:8px">
         <div class="row" style="margin-bottom:8px;gap:6px;flex-wrap:wrap">
           <button class="btn" onclick="filterFrames('all')" id="fAll">All</button>
+          <button class="btn" onclick="filterFrames('review')" id="fReview">⏳ Review</button>
           <button class="btn" onclick="filterFrames('pending')" id="fPend">⬜ Pending</button>
           <button class="btn" onclick="filterFrames('labeled')" id="fLabeled">🟢 Labeled</button>
           <button class="btn" onclick="filterFrames('no_ball')" id="fNoBall">🟡 No Ball</button>
           <button class="btn" onclick="filterFrames('auto')" id="fAuto">🤖 Auto</button>
           <button class="btn" onclick="filterFrames('manual')" id="fManual">✋ Manual</button>
-          <button class="btn" onclick="clearAutoFrames()" style="margin-left:auto;color:#dc2626">🗑️ Clear Auto</button>
+          <button class="btn" onclick="approveAllLabels()" style="margin-left:auto;color:var(--green)">👍 Approve All</button>
+          <button class="btn" onclick="clearAutoFrames()" style="color:#dc2626">🗑️ Clear Auto</button>
+          <button class="btn" onclick="clearAllFrames()" style="color:#991b1b">🗑️ Clear All</button>
         </div>
         <div id="labelGrid" class="frame-grid" style="max-height:420px;overflow-y:auto"></div>
       </div>
@@ -286,6 +301,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
           <div class="stat-box"><div class="val" id="tPending" style="color:var(--red)">—</div><div class="lbl">Unlabeled</div></div>
         </div>
         <div id="trainReadiness" style="margin:10px 0"></div>
+        <div id="trainTimeEst" class="hint" style="margin:6px 0 10px"></div>
 
         <div style="margin-top:16px">
           <label style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
@@ -293,6 +309,15 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
             <input type="range" id="epochSlider" min="10" max="100" value="30"
               oninput="document.getElementById('epochVal').textContent=this.value" style="flex:1">
             <span id="epochVal" style="min-width:30px;font-weight:700">30</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-weight:600;min-width:80px">Device:</span>
+            <select id="trainDeviceSelect" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-size:12px">
+              <option value="auto">Auto (GPU if available, else CPU)</option>
+              <option value="xpu:0">Intel GPU (XPU)</option>
+              <option value="0">NVIDIA GPU (CUDA)</option>
+              <option value="cpu">CPU</option>
+            </select>
           </label>
           <div class="hint" style="margin-bottom:12px">More epochs = more accurate but slower. 30 is good for first run.</div>
 
@@ -337,7 +362,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
   <div class="row" style="margin-bottom:10px">
     <div>
       <div style="font-size:18px;font-weight:800">🚀 Step 4 — Deploy the Model</div>
-      <div class="hint" style="margin-top:3px">Export to OpenVINO and activate. The old model is backed up automatically.</div>
+      <div class="hint" style="margin-top:3px">Backs up the old model, activates the new <code>best.pt</code>, and hot-reloads the live tracker.</div>
     </div>
     <div style="margin-left:auto">
       <button class="btn" onclick="gotoStep(3)">← Back</button>
@@ -362,12 +387,12 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
           <div style="font-weight:600;margin-bottom:6px">What deploy does:</div>
           <div style="display:grid;gap:5px">
             <div>✅ Backs up old <code>models/best.pt</code></div>
-            <div>✅ Exports new model → OpenVINO format</div>
-            <div>✅ Copies to <code>models/</code></div>
-            <div>✅ Restart tracker to use it</div>
+            <div>✅ Activates new <code>models/best.pt</code></div>
+            <div>✅ Hot-reloads AI tracker immediately</div>
           </div>
         </div>
         <button class="btn primary lg" id="deployBtn" onclick="deployModel()">🚀 Deploy New Model</button>
+        <div id="deployTargetRun" class="hint" style="margin-top:6px;font-size:12px;font-family:monospace"></div>
         <div id="deployStatus" style="margin-top:10px"></div>
       </div>
     </div>
@@ -440,7 +465,15 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
     document.getElementById('step' + n).classList.add('active');
     document.querySelector(`.step[data-step="${n}"]`).classList.add('active');
-    if (n === 2 || n === 3) loadFrames();
+    if (n === 2 || n === 3) {
+      loadFrames().then(() => {
+        if (n === 2 && !currentFrame && filteredFrames.length > 0) {
+          const firstPendIdx = filteredFrames.findIndex(f => f.pending);
+          const pick = firstPendIdx >= 0 ? firstPendIdx : 0;
+          selectFrame(filteredFrames[pick].name, pick);
+        }
+      });
+    }
     if (n === 3) refreshTrainStatus();
     if (n === 4) {
       refreshTrainStatus();
@@ -477,6 +510,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
   // ── Render label grid ──────────────────────────────────────────────────────
   function renderLabelGrid() {
     filteredFrames = allFrames.filter(f => {
+      if (currentFilter === 'review') return f.needs_review;
       if (currentFilter === 'pending') return f.pending;
       if (currentFilter === 'labeled') return f.labeled;
       if (currentFilter === 'no_ball') return f.no_ball;
@@ -489,14 +523,16 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
       `<div class="thumb ${f.labeled?'labeled':f.no_ball?'no-ball':''} ${currentFrame===f.name?'selected':''}"
         data-name="${f.name}" data-idx="${i}" onclick="selectFrame('${f.name}',${i})">
         <img src="/api/training/frames/${f.name}/image" loading="lazy">
-        <div class="tb">${f.labeled?'✅ Ball':f.no_ball?'⊘ No Ball':'⬜ Pending'}</div>
+        <div class="tb">${f.needs_review?'⏳ Review':f.labeled?'✅ Ball':f.no_ball?'⊘ No Ball':'⬜ Pending'}</div>
         <button class="del" onclick="deleteFrame(event,'${f.name}')">✕</button>
       </div>`
     ).join('');
     // Update label progress
+    const revCnt = allFrames.filter(f => f.needs_review).length;
     document.getElementById('labelProgress').textContent =
       allFrames.filter(f=>f.labeled).length + ' labeled, ' +
-      allFrames.filter(f=>f.no_ball).length + ' no-ball';
+      allFrames.filter(f=>f.no_ball).length + ' no-ball' +
+      (revCnt ? ` · ${revCnt} to review` : '');
   }
 
   function thumbHTML(f) {
@@ -512,10 +548,55 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
 
   window.filterFrames = (f) => {
     currentFilter = f;
-    const map = { all: 'fAll', pending: 'fPend', labeled: 'fLabeled', no_ball: 'fNoBall', auto: 'fAuto', manual: 'fManual' };
+    const map = { all: 'fAll', review: 'fReview', pending: 'fPend', labeled: 'fLabeled', no_ball: 'fNoBall', auto: 'fAuto', manual: 'fManual' };
     Object.values(map).forEach(id => document.getElementById(id)?.classList.remove('primary'));
     document.getElementById(map[f] || 'fAll')?.classList.add('primary');
     renderLabelGrid();
+  };
+
+  window.approveCurrent = async () => {
+    if (!currentFrame) return;
+    try {
+      await CL.api('/api/training/frames/' + encodeURIComponent(currentFrame) + '/approve', { method: 'POST' });
+      CL.toast('👍 Label approved!');
+      await loadFrames();
+      if (currentFilter === 'review') {
+        const nxt = filteredFrames.find(f => f.needs_review) || filteredFrames[0];
+        if (nxt) selectFrame(nxt.name, filteredFrames.indexOf(nxt));
+      } else {
+        const idx = filteredFrames.findIndex(f => f.name === currentFrame);
+        if (idx >= 0) selectFrame(currentFrame, idx);
+      }
+    } catch (e) { CL.toast(e.message, true); }
+  };
+
+  window.rejectCurrent = async () => {
+    if (!currentFrame) return;
+    try {
+      await CL.api('/api/training/frames/' + encodeURIComponent(currentFrame) + '/reject', { method: 'POST' });
+      currentBox = null;
+      redraw();
+      CL.toast('👎 Label rejected (click 👍 Approve anytime to undo)');
+      await loadFrames();
+      if (currentFilter === 'review') {
+        const nxt = filteredFrames.find(f => f.needs_review) || filteredFrames[0];
+        if (nxt) selectFrame(nxt.name, filteredFrames.indexOf(nxt));
+      } else {
+        const idx = filteredFrames.findIndex(f => f.name === currentFrame);
+        if (idx >= 0) selectFrame(currentFrame, idx);
+      }
+    } catch (e) { CL.toast(e.message, true); }
+  };
+
+  window.approveAllLabels = async () => {
+    const revCnt = allFrames.filter(f => f.needs_review).length;
+    if (!revCnt) { CL.toast('All labels are already approved.'); return; }
+    if (!confirm(`Approve all ${revCnt} auto-labeled frame(s) for training?`)) return;
+    try {
+      const r = await CL.api('/api/training/frames/approve-all', { method: 'POST' });
+      CL.toast(`👍 Approved ${r.approved || 0} label(s)`);
+      await loadFrames();
+    } catch (e) { CL.toast(e.message, true); }
   };
 
   window.clearAutoFrames = async () => {
@@ -525,6 +606,19 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
     try {
       const r = await CL.api('/api/training/frames-auto', { method: 'DELETE' });
       CL.toast(`🗑️ Cleared ${r.count || 0} auto-harvested frame(s)`);
+      await loadFrames();
+    } catch (e) { CL.toast(e.message, true); }
+  };
+
+  window.clearAllFrames = async () => {
+    if (!allFrames.length) { CL.toast('No training frames to clear.'); return; }
+    if (!confirm(`Delete ALL ${allFrames.length} training frames and labels? Your active models/best.pt will NOT be deleted.`)) return;
+    try {
+      const r = await CL.api('/api/training/frames-all', { method: 'DELETE' });
+      currentFrame = null;
+      currentBox = null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      CL.toast(`🗑️ Cleared all ${r.count || 0} frame(s)`);
       await loadFrames();
     } catch (e) { CL.toast(e.message, true); }
   };
@@ -559,6 +653,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
     document.getElementById('annoTitle').textContent = name;
     document.getElementById('saveWithBall').disabled = false;
     document.getElementById('saveNoBall').disabled   = false;
+    const appBtn = document.getElementById('approveOneBtn');
+    const rejBtn = document.getElementById('rejectOneBtn');
+    if (appBtn) appBtn.disabled = false;
+    if (rejBtn) rejBtn.disabled = false;
 
     // Find index in filteredFrames for nav
     if (idx === undefined) idx = filteredFrames.findIndex(f => f.name === name);
@@ -638,10 +736,164 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
                    w: Math.abs(x-startX),  h: Math.abs(y-startY) };
     redraw();
   });
-  canvas.addEventListener('mouseup',   () => { isDrawing = false; });
+  function finishBoxOrTap() {
+    if (!isDrawing || !currentFrame) { isDrawing = false; return; }
+    isDrawing = false;
+    // 1-tap quick-box: clicking/tapping the ball without dragging places a centered ball box
+    if (!currentBox || (currentBox.w < 8 && currentBox.h < 8)) {
+      const bw = Math.max(24, Math.round(canvas.width * 0.04));
+      const bh = Math.max(24, Math.round(canvas.height * 0.06));
+      currentBox = {
+        x: Math.max(0, Math.min(canvas.width - bw, startX - bw / 2)),
+        y: Math.max(0, Math.min(canvas.height - bh, startY - bh / 2)),
+        w: bw,
+        h: bh,
+      };
+      redraw();
+    }
+  }
+  canvas.addEventListener('mouseup',   finishBoxOrTap);
   canvas.addEventListener('touchstart', e => { e.preventDefault(); if (!currentFrame) return; isDrawing=true; [startX,startY]=canvasXY(e); currentBox=null; }, {passive:false});
   canvas.addEventListener('touchmove',  e => { e.preventDefault(); if (!isDrawing) return; const [x,y]=canvasXY(e); currentBox={x:Math.min(startX,x),y:Math.min(startY,y),w:Math.abs(x-startX),h:Math.abs(y-startY)}; redraw(); }, {passive:false});
-  canvas.addEventListener('touchend',  () => { isDrawing = false; });
+  canvas.addEventListener('touchend',  finishBoxOrTap);
+
+  window.importVideoClip = async (file) => {
+    if (!file) return;
+    const btn = document.getElementById('importVideoBtn');
+    try {
+      btn.disabled = true;
+      btn.textContent = '⏳ Extracting & Auto-Labeling…';
+      const r = await fetch('/api/training/video/import?filename=' + encodeURIComponent(file.name) + '&max_frames=40', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: file,
+        credentials: 'same-origin'
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Video import failed');
+      CL.toast(`🎬 Extracted ${data.extracted} frames (${data.labeled} auto-labeled)!`);
+      await loadFrames();
+    } catch (e) {
+      CL.toast(e.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🎬 Import Video';
+      const inp = document.getElementById('videoImportInput');
+      if (inp) inp.value = '';
+    }
+  };
+
+  window.uploadBatchPhotos = async (files) => {
+    if (!files || !files.length) return;
+    const list = [...files].filter(f => /\.(jpe?g|png|webp|bmp)$/i.test(f.name) || (f.type || '').startsWith('image/'));
+    if (!list.length) { CL.toast('No image files selected.', true); return; }
+    const btn = document.getElementById('uploadPhotosBtn');
+    const fbtn = document.getElementById('uploadFolderBtn');
+    let ok = 0, done = 0;
+    try {
+      btn.disabled = true;
+      if (fbtn) fbtn.disabled = true;
+      const chunk = 4;
+      for (let i = 0; i < list.length; i += chunk) {
+        const batch = list.slice(i, i + chunk);
+        await Promise.all(batch.map(async (f) => {
+          const r = await fetch('/api/training/frames/upload?filename=' + encodeURIComponent(f.name), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: f,
+            credentials: 'same-origin'
+          });
+          if (r.ok) ok++;
+          done++;
+          btn.textContent = `⏳ Uploading ${done}/${list.length}…`;
+        }));
+      }
+      CL.toast(`📤 Uploaded ${ok} photo(s)`);
+      await loadFrames();
+    } catch (e) {
+      CL.toast(e.message, true);
+    } finally {
+      btn.disabled = false;
+      if (fbtn) fbtn.disabled = false;
+      btn.textContent = '📤 Upload Photos';
+      const inp = document.getElementById('batchUploadInput');
+      if (inp) inp.value = '';
+      const finp = document.getElementById('folderUploadInput');
+      if (finp) finp.value = '';
+    }
+  };
+
+  let autoLabelRunning = false;
+  let autoLabelStop = false;
+
+  window.autoLabelAll = async () => {
+    const btn = document.getElementById('autoLabelAllBtn');
+    if (autoLabelRunning) {
+      autoLabelStop = true;
+      btn.textContent = '⏹ Stopping…';
+      return;
+    }
+    autoLabelRunning = true;
+    autoLabelStop = false;
+    let totalChecked = 0, totalLabeled = 0;
+    try {
+      while (!autoLabelStop) {
+        btn.textContent = totalChecked
+          ? `⏳ Auto-labeling… (${totalLabeled} labeled / ${totalChecked} checked · Click to Stop)`
+          : '⏳ Auto-labeling… (Click to Stop)';
+        const r = await CL.api('/api/training/auto-label', { method: 'POST', body: { limit: 30 } });
+        totalChecked += Number(r.checked || 0);
+        totalLabeled += Number(r.labeled || 0);
+        await loadFrames();
+        if (!r.checked || !r.remaining) break;
+      }
+      CL.toast(`🤖 Auto-labeled ${totalLabeled} of ${totalChecked} frame(s)${autoLabelStop ? ' (stopped)' : ''}`);
+      if (currentFrame) {
+        const idx = filteredFrames.findIndex(f => f.name === currentFrame);
+        if (idx >= 0) selectFrame(currentFrame, idx);
+      }
+    } catch (e) {
+      CL.toast(e.message, true);
+    } finally {
+      autoLabelRunning = false;
+      autoLabelStop = false;
+      btn.disabled = false;
+      btn.textContent = '🤖 Auto-Label All Pending';
+    }
+  };
+
+  window.autoLabelCurrent = async () => {
+    if (!currentFrame) { CL.toast('Select a frame first', true); return; }
+    const btn = document.getElementById('autoBoxOneBtn');
+    try {
+      btn.disabled = true;
+      const r = await CL.api('/api/training/auto-label', { method: 'POST', body: { frame: currentFrame } });
+      if (r.box && imgW && imgH) {
+        const b = r.box;
+        currentBox = { x: (b.cx - b.w / 2) * imgW, y: (b.cy - b.h / 2) * imgH, w: b.w * imgW, h: b.h * imgH };
+        redraw();
+        CL.toast('🤖 Ball auto-boxed — adjust if needed and click Ball here');
+        await loadFrames();
+      } else {
+        CL.toast('No ball detected on this frame — draw box manually or click No ball', true);
+      }
+    } catch (e) {
+      CL.toast(e.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (!document.getElementById('step2').classList.contains('active')) return;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target && e.target.tagName) || '')) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); navFrame(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); navFrame(1); }
+    else if (e.key === 's' || e.key === 'S' || e.key === 'Enter') { e.preventDefault(); saveLabel(true); }
+    else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); saveLabel(false); }
+    else if (e.key === 'a' || e.key === 'A') { e.preventDefault(); approveCurrent(); }
+    else if (e.key === 'r' || e.key === 'R') { e.preventDefault(); rejectCurrent(); }
+  });
 
   window.clearBox = () => { currentBox = null; redraw(); };
 
@@ -704,13 +956,29 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
       ready.innerHTML = '<span class="badge bad" style="font-size:12px;padding:4px 12px">❌ Need at least 5 labeled frames with ball (have ' + r.labeled + ')</span>';
       document.getElementById('startTrainBtn').disabled = true;
     }
+    updateTimeEstimate((r.labeled || 0) + (r.no_ball || 0));
   }
+
+  function updateTimeEstimate(totalLabeled) {
+    const el = document.getElementById('trainTimeEst');
+    if (!el) return;
+    const ep = Number(document.getElementById('epochSlider')?.value || 30);
+    const n = Math.max(1, totalLabeled || 20);
+    const cpuMins = Math.round((n * ep * 1.2) / 60);
+    const estText = cpuMins >= 60 ? `~${(cpuMins / 60).toFixed(1)} hrs` : `~${Math.max(1, cpuMins)} min`;
+    el.innerHTML = `⏱ Estimated time on CPU for <b>${n}</b> images × <b>${ep}</b> epochs: <b>${estText}</b> (much faster on NVIDIA GPU).`;
+  }
+  document.getElementById('epochSlider')?.addEventListener('input', () => {
+    const lbl = allFrames.filter(f => f.labeled || f.no_ball).length;
+    updateTimeEstimate(lbl);
+  });
 
   // ── Start training ─────────────────────────────────────────────────────────
   window.startTraining = async () => {
     const epochs = parseInt(document.getElementById('epochSlider').value);
+    const device = document.getElementById('trainDeviceSelect')?.value || 'auto';
     try {
-      await CL.api('/api/training/run', { method: 'POST', body: { epochs, batch: 8 } });
+      await CL.api('/api/training/run', { method: 'POST', body: { epochs, batch: 8, device } });
       document.getElementById('startTrainBtn').style.display = 'none';
       document.getElementById('stopTrainBtn').style.display  = '';
       document.getElementById('trainDoneCard').style.display = 'none';
@@ -754,18 +1022,24 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-
         log.scrollTop   = log.scrollHeight;
       }
 
-      if (s.status === 'done') {
-        clearInterval(trainPollTimer);
-        document.getElementById('startTrainBtn').style.display = '';
-        document.getElementById('stopTrainBtn').style.display  = 'none';
+      if (s.status === 'done' || s.has_trained_model) {
+        if (s.status === 'done') {
+          clearInterval(trainPollTimer);
+          document.getElementById('startTrainBtn').style.display = '';
+          document.getElementById('stopTrainBtn').style.display  = 'none';
+        }
         document.getElementById('trainDoneCard').style.display = '';
         const m = s.metrics;
         document.getElementById('doneMetrics').textContent = m && m.mAP50
           ? `mAP50 = ${(m.mAP50*100).toFixed(1)}%  |  mAP50-95 = ${(m.mAP50_95*100).toFixed(1)}%`
-          : 'Model saved. Click Deploy to activate.';
+          : (s.latest_run ? `Trained model ready (${s.latest_run}). Click Deploy to activate.` : 'Model saved. Click Deploy to activate.');
         // Set deploy metrics
         document.getElementById('newMap').textContent = m?.mAP50
-          ? (m.mAP50*100).toFixed(1) + '%' : '—';
+          ? (m.mAP50*100).toFixed(1) + '%' : (s.has_trained_model ? 'Ready' : '—');
+        const trg = document.getElementById('deployTargetRun');
+        if (trg && s.best_model) {
+          trg.textContent = 'Ready to deploy: ' + s.best_model.replace(/\\/g, '/');
+        }
       } else if (s.status === 'error') {
         clearInterval(trainPollTimer);
         document.getElementById('startTrainBtn').style.display = '';

@@ -60,10 +60,31 @@ def main():
         sys.exit(f"data.yaml not found: {data_path}")
 
     device = args.device
-    if device is None:
+    if device in (None, "", "auto"):
         try:
             import torch
-            device = "0" if torch.cuda.is_available() else "cpu"
+            if torch.cuda.is_available():
+                device = "0"
+            elif hasattr(torch, "xpu") and torch.xpu.is_available():
+                device = "xpu:0"
+            else:
+                device = "cpu"
+        except Exception:
+            device = "cpu"
+    elif str(device).startswith("xpu"):
+        try:
+            import torch
+            if not (hasattr(torch, "xpu") and torch.xpu.is_available()):
+                print("⚠️  Intel GPU (XPU) not available in this PyTorch build (install torch xpu wheel); falling back to CPU.")
+                device = "cpu"
+        except Exception:
+            device = "cpu"
+    elif str(device) in ("0", "cuda", "cuda:0"):
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                print("⚠️  NVIDIA CUDA GPU not available in this PyTorch build; falling back to CPU.")
+                device = "cpu"
         except Exception:
             device = "cpu"
 
@@ -73,8 +94,6 @@ def main():
     print(f"Epochs : {args.epochs}  |  Batch: {args.batch}  |  imgsz: {args.imgsz}")
     print(f"Freeze : first {args.freeze} backbone layers (fine-tuning mode)")
     print()
-
-    model = YOLO(str(model_path))
 
     is_android = (
         os.path.exists("/data/data/com.termux")
@@ -89,43 +108,61 @@ def main():
     if is_android:
         # Android/Termux restricts /dev/shm; single-process loading avoids DataLoader shm crashes.
         train_kwargs["workers"] = 0
+    elif os.name == "nt":
+        # Avoid spawning 8 heavy Python DataLoader processes on Windows
+        train_kwargs["workers"] = 2
+    if str(device).startswith("xpu"):
+        # Intel Iris Xe Level Zero backend fails Ultralytics AMP FP16 checks
+        train_kwargs["amp"] = False
 
-    results = model.train(
-        data       = str(data_path),
-        epochs     = args.epochs,
-        imgsz      = args.imgsz,
-        batch      = args.batch,
-        device     = device,
-        name       = args.name,
-        lr0        = args.lr0,
-        lrf        = 0.05,          # gentler final LR decay for small datasets
-        cos_lr     = True,
-        momentum   = 0.937,
-        weight_decay = 0.0005,
-        warmup_epochs = 2,
-        freeze     = args.freeze,
-        patience   = args.patience,
-        # Augmentation — tuned for small fast-moving cricket ball
-        hsv_h      = 0.015,
-        hsv_s      = 0.6,
-        hsv_v      = 0.4,
-        degrees    = 5.0,
-        translate  = 0.08,
-        scale      = 0.25,          # avoid shrinking tiny ball out of frame
-        fliplr     = 0.5,
-        flipud     = 0.0,
-        mosaic     = 0.3,
-        close_mosaic = 5,           # clean un-mosaiced frames in final 5 epochs
-        mixup      = 0.0,
-        copy_paste = 0.0,
-        # Save settings
-        save       = True,
-        save_period = 10,
-        project    = str(ROOT / "runs" / "detect"),
-        exist_ok   = True,
-        verbose    = True,
-        **train_kwargs,
-    )
+    def _run_train(dev, extra_kwargs):
+        m = YOLO(str(model_path))
+        return m.train(
+            data       = str(data_path),
+            epochs     = args.epochs,
+            imgsz      = args.imgsz,
+            batch      = args.batch,
+            device     = dev,
+            name       = args.name,
+            lr0        = args.lr0,
+            lrf        = 0.05,          # gentler final LR decay for small datasets
+            cos_lr     = True,
+            momentum   = 0.937,
+            weight_decay = 0.0005,
+            warmup_epochs = 2,
+            freeze     = args.freeze,
+            patience   = args.patience,
+            # Augmentation — tuned for small fast-moving cricket ball
+            hsv_h      = 0.015,
+            hsv_s      = 0.6,
+            hsv_v      = 0.4,
+            degrees    = 5.0,
+            translate  = 0.08,
+            scale      = 0.25,          # avoid shrinking tiny ball out of frame
+            fliplr     = 0.5,
+            flipud     = 0.0,
+            mosaic     = 0.3,
+            close_mosaic = 5,           # clean un-mosaiced frames in final 5 epochs
+            mixup      = 0.0,
+            copy_paste = 0.0,
+            # Save settings
+            save       = True,
+            save_period = 10,
+            project    = str(ROOT / "runs" / "detect"),
+            exist_ok   = True,
+            verbose    = True,
+            **extra_kwargs,
+        )
+
+    try:
+        results = _run_train(device, train_kwargs)
+    except RuntimeError as exc:
+        if str(device).startswith("xpu") and ("level_zero" in str(exc).lower() or "xpu" in str(exc).lower()):
+            print(f"⚠️  Intel XPU training failed on this GPU ({exc}); retrying on CPU...")
+            xpu_fallback = {k: v for k, v in train_kwargs.items() if k != "amp"}
+            results = _run_train("cpu", xpu_fallback)
+        else:
+            raise
 
     best_pt = ROOT / "runs" / "detect" / args.name / "weights" / "best.pt"
     if not best_pt.exists():

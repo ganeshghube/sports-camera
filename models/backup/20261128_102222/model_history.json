@@ -1,0 +1,177 @@
+[
+  {
+    "timestamp": "2026-11-28 10:08:13",
+    "model_file": "uploaded:CBDbest.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 1837
+  },
+  {
+    "timestamp": "2026-11-28 10:05:03",
+    "model_file": "uploaded:CBDbest.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 1837
+  },
+  {
+    "timestamp": "2026-11-28 10:03:04",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795823458\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 1837
+  },
+  {
+    "timestamp": "2026-11-28 09:13:29",
+    "model_file": "uploaded:best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 1837
+  },
+  {
+    "timestamp": "2026-11-26 21:36:28",
+    "model_file": "uploaded:CBDbest.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 29
+  },
+  {
+    "timestamp": "2026-11-26 21:30:24",
+    "model_file": "uploaded:best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 29
+  },
+  {
+    "timestamp": "2026-11-26 21:30:03",
+    "model_file": "uploaded:best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 29
+  },
+  {
+    "timestamp": "2026-11-26 21:13:54",
+    "model_file": "uploaded:best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 44
+  },
+  {
+    "timestamp": "2026-11-26 18:19:21",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795716125\\weights\\best.pt",
+    "mAP50": 0.6492,
+    "mAP50_95": 0.357,
+    "total_frames": 80
+  },
+  {
+    "timestamp": "2026-11-26 18:02:01",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795714029\\weights\\best.pt",
+    "mAP50": 0.7723,
+    "mAP50_95": 0.4272,
+    "total_frames": 71
+  },
+  {
+    "timestamp": "2026-11-26 18:02:00",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795714029\\weights\\best.pt",
+    "mAP50": 0.7723,
+    "mAP50_95": 0.4272,
+    "total_frames": 71
+  },
+  {
+    "timestamp": "2026-11-26 18:01:18",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795714029\\weights\\best.pt",
+    "mAP50": 0.7723,
+    "mAP50_95": 0.4272,
+    "total_frames": 70
+  },
+  {
+    "timestamp": "2026-11-26 18:01:16",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795714029\\weights\\best.pt",
+    "mAP50": 0.7723,
+    "mAP50_95": 0.4272,
+    "total_frames": 70
+  },
+  {
+    "timestamp": "2026-11-26 17:18:07",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795713083\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 20
+  },
+  {
+    "timestamp": "2026-11-26 17:17:37",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795713083\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 20
+  },
+  {
+    "timestamp": "2026-11-26 17:10:06",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795712668\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 20
+  },
+  {
+    "timestamp": "2026-11-26 17:07:13",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795712668\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 20
+  },
+  {
+    "timestamp": "2026-11-26 17:02:20",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795712366\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 6
+  },
+  {
+    "timestamp": "2026-11-26 17:02:10",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795712366\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 6
+  },
+  {
+    "timestamp": "2026-11-26 16:58:42",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795712209\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 6
+  },
+  {
+    "timestamp": "2026-11-25 22:32:14",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795645049\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 50
+  },
+  {
+    "timestamp": "2026-11-25 22:24:48",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795645049\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 45
+  },
+  {
+    "timestamp": "2026-11-25 22:17:51",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795644671\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 20
+  },
+  {
+    "timestamp": "2026-11-23 21:43:31",
+    "model_file": "C:\\00_Ganesh\\Sports-Camera\\runs\\detect\\cricket_train_1795461640\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 32
+  },
+  {
+    "timestamp": "2026-11-23 19:29:57",
+    "model_file": "C:\\00_Ganesh\\Sports-Camera\\runs\\detect\\cricket_train_1795461640\\weights\\best.pt",
+    "mAP50": null,
+    "mAP50_95": null,
+    "total_frames": 30
+  }
+]

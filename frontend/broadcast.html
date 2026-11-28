@@ -50,7 +50,7 @@ html,body{margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;background
         outOfPitchSince = 0;
       } else {
         if (!outOfPitchSince) outOfPitchSince = nowMs;
-        if (nowMs - outOfPitchSince >= 2000 || currentZoom > 1.08) {
+        if (nowMs - outOfPitchSince >= 200 || currentZoom > 1.08) {
           zoomActive = true;
         }
       }
@@ -60,8 +60,8 @@ html,body{margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;background
         targetZoom = zFactor;
         const clampedX = Math.max(12, Math.min(88, nx * 100));
         const clampedY = Math.max(12, Math.min(88, ny * 100));
-        if (Math.abs(clampedX - targetOriginX) > 2.0) targetOriginX = clampedX;
-        if (Math.abs(clampedY - targetOriginY) > 2.0) targetOriginY = clampedY;
+        if (Math.abs(clampedX - targetOriginX) > 1.0) targetOriginX = clampedX;
+        if (Math.abs(clampedY - targetOriginY) > 1.0) targetOriginY = clampedY;
       } else {
         targetZoom = 1.0;
         targetOriginX = 50;
@@ -74,23 +74,23 @@ html,body{margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;background
       targetOriginY = 50;
     }
 
-    // Slew-rate limited cinematic zoom matching preview.html (40% slower)
+    // Dynamic responsive auto-zoom:
     const maxZoomRate = 0.15;
     const maxPanRate = 8.4;
     const ease = 0.021;
 
-    const maxZoomStep = maxZoomRate * dt;
+    const maxZoomStep = maxZoomRate * 3.5 * dt;
     const zoomDiff = targetZoom - currentZoom;
-    const zoomStep = Math.sign(zoomDiff) * Math.min(Math.abs(zoomDiff) * (ease * 60 * dt), maxZoomStep);
+    const zoomStep = Math.sign(zoomDiff) * Math.min(Math.abs(zoomDiff) * (ease * 3.5 * 60 * dt), maxZoomStep);
     currentZoom += zoomStep;
 
-    const maxPanStep = maxPanRate * dt;
+    const maxPanStep = maxPanRate * 4.0 * dt;
     const panDiffX = targetOriginX - currentOriginX;
-    const panStepX = Math.sign(panDiffX) * Math.min(Math.abs(panDiffX) * (ease * 60 * dt), maxPanStep);
+    const panStepX = Math.sign(panDiffX) * Math.min(Math.abs(panDiffX) * (ease * 4.0 * 60 * dt), maxPanStep);
     currentOriginX += panStepX;
 
     const panDiffY = targetOriginY - currentOriginY;
-    const panStepY = Math.sign(panDiffY) * Math.min(Math.abs(panDiffY) * (ease * 60 * dt), maxPanStep);
+    const panStepY = Math.sign(panDiffY) * Math.min(Math.abs(panDiffY) * (ease * 4.0 * 60 * dt), maxPanStep);
     currentOriginY += panStepY;
 
     if (vp) {

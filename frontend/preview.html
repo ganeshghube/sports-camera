@@ -8,22 +8,39 @@
 <style>
 .preview-stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;min-height:300px;box-shadow:0 12px 30px rgba(0,0,0,.2)}
 .preview-viewport{position:absolute;inset:0;width:100%;height:100%;transform-origin:50% 50%;will-change:transform}
-.preview-viewport img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
-.preview-viewport canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.preview-viewport img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
+.preview-viewport canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
 .preview-stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none;background:transparent}
-.preview-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#aab7c4;font-size:18px;font-weight:700}
+.preview-empty{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:12px;text-align:center;color:#aab7c4;font-size:16px;font-weight:700;padding:20px;z-index:3}
+.preview-empty .empty-sub{font-size:13px;font-weight:500;color:#8899aa;max-width:440px;line-height:1.4}
 .preview-hud{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;z-index:5;pointer-events:none}
-.hud-pill{background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.15);color:#fff;padding:7px 11px;border-radius:999px;font:700 12px Inter;backdrop-filter:blur(6px)}
+.hud-pill{background:rgba(0,0,0,.75);border:1px solid rgba(255,255,255,.18);color:#fff;padding:7px 12px;border-radius:999px;font:700 12px Inter;backdrop-filter:blur(8px);box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .hud-pill.live{background:#b91c1c}.hud-pill.good{background:#166534}.hud-pill.warn{background:#92400e}.hud-pill.zoom{background:#0369a1}
 .control-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
-.big-control{min-height:54px;font-size:16px;font-weight:800}
+.action-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.big-control{min-height:54px;font-size:15px;font-weight:800;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;touch-action:manipulation}
 .big-control.running{background:#c41e3a!important;border-color:#c41e3a!important;color:#fff!important}
 .big-control.paused{background:#d97706!important;border-color:#d97706!important;color:#fff!important}
 .big-control.zoom-active{background:#0284c7!important;border-color:#0284c7!important;color:#fff!important;box-shadow:0 0 16px rgba(2,132,199,.5)}
 .status-card{display:grid;gap:8px}.status-line{display:flex;justify-content:space-between;gap:12px;align-items:center;font-weight:700}.status-line span:first-child{color:var(--muted);font-size:12px}
 @media(max-width:1100px){.control-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:700px){.control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:500px){.control-grid{grid-template-columns:1fr}.preview-hud{left:7px;top:7px}.hud-pill{padding:6px 9px;font-size:11px}}
+@media(max-width:768px){
+  .control-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .big-control{min-height:48px;font-size:14px}
+  .action-row{gap:8px}
+  .action-row .btn{padding:8px 12px;font-size:12px}
+  .preview-hud{left:8px;top:8px;right:8px;gap:6px}
+  .hud-pill{padding:5px 8px;font-size:11px}
+}
+@media(max-width:500px){
+  .control-grid{grid-template-columns:1fr;gap:8px}
+  .big-control{min-height:48px;font-size:15px}
+  .action-row .btn{width:100%;justify-content:center}
+  .preview-stage{min-height:220px;border-radius:10px}
+  .preview-empty{font-size:14px;padding:12px}
+  .preview-hud{left:6px;top:6px;right:6px;gap:4px}
+  .hud-pill{padding:4px 7px;font-size:10px}
+}
 </style>
 </head>
 <body>
@@ -44,7 +61,10 @@
     <span class="hud-pill" id="ballHud">BALL: —</span>
     <span class="hud-pill" id="streamHud">YOUTUBE: OFF</span>
    </div>
-   <div class="preview-empty" id="empty">Press <b>Start Camera</b> to see the live picture.</div>
+   <div class="preview-empty" id="empty">
+    <div id="emptyMain">Press <b>Start Camera</b> to see the live picture.</div>
+    <div class="empty-sub" id="emptySub">Connect a webcam, or configure an Android Phone camera / RTSP stream in Setup Camera.</div>
+   </div>
   </div>
 
   <div class="control-grid" style="margin-top:12px">
@@ -54,9 +74,11 @@
    <button class="btn primary big-control" id="recordBtn">⏺ Start Recording</button>
    <button class="btn primary big-control" id="youtubeBtn">▶ Start YouTube</button>
   </div>
-  <div class="row" style="margin-top:10px">
+  <div class="action-row">
    <button class="btn" id="pauseBtn" disabled>⏸ Pause Recording</button>
    <button class="btn" id="overlayBtn">👁 Score Overlay</button>
+   <button class="btn" id="setPitchHomeBtn" title="Set current camera angle as the fixed cricket pitch position">📍 Set Pitch Home</button>
+   <button class="btn" id="returnPitchHomeBtn" title="Return camera rotation and zoom to the fixed cricket pitch">🏠 Return to Pitch</button>
    <button class="btn" id="zoomSpeedBtn" title="Adjust Auto Zoom speed">⚡ Zoom Speed: Normal (1.0x)</button>
    <button class="btn" id="restartCamBtn" title="Reset camera capture without leaving this page">🔄 Reset Camera</button>
    <span class="hint" id="message">Ready</span>
@@ -108,10 +130,10 @@
   const zoomSpeedModes = [
     { label: "Slow (0.6x)", mult: 0.6 },
     { label: "Normal (1.0x)", mult: 1.0 },
-    { label: "Fast (1.5x)", mult: 1.5 },
-    { label: "Quick (2.0x)", mult: 2.0 },
+    { label: "Fast (2.5x)", mult: 2.5 },
+    { label: "High Speed (5.0x)", mult: 5.0 },
   ];
-  let zoomSpeedIdx = Math.max(0, Math.min(zoomSpeedModes.length - 1, Number(localStorage.getItem("cl_zoom_speed_idx") ?? 1)));
+  let zoomSpeedIdx = Math.max(0, Math.min(zoomSpeedModes.length - 1, Number(localStorage.getItem("cl_zoom_speed_idx") ?? 2)));
   function renderZoomSpeedBtn(){
     const m = zoomSpeedModes[zoomSpeedIdx];
     const b = $("zoomSpeedBtn");
@@ -146,7 +168,7 @@
         outOfPitchSince = 0;
       } else {
         if(!outOfPitchSince) outOfPitchSince = nowMs;
-        if(nowMs - outOfPitchSince >= 2000 || currentZoom > 1.08){
+        if(nowMs - outOfPitchSince >= 200 || currentZoom > 1.08){
           zoomActive = true;
         }
       }
@@ -156,9 +178,9 @@
         targetZoom = zFactor;
         const clampedX = Math.max(12, Math.min(88, nx * 100));
         const clampedY = Math.max(12, Math.min(88, ny * 100));
-        // Deadband: ignore tiny ball jitter < 2% to avoid rapid micro-panning
-        if(Math.abs(clampedX - targetOriginX) > 2.0) targetOriginX = clampedX;
-        if(Math.abs(clampedY - targetOriginY) > 2.0) targetOriginY = clampedY;
+        // Follow ball promptly
+        if(Math.abs(clampedX - targetOriginX) > 1.0) targetOriginX = clampedX;
+        if(Math.abs(clampedY - targetOriginY) > 1.0) targetOriginY = clampedY;
 
         $("zoomHud").textContent = `ZOOM: ${currentZoom.toFixed(1)}x • TRACKING`;
         $("zoomHud").className = "hud-pill good";
@@ -187,26 +209,24 @@
       }
     }
 
-    // Slew-rate limited cinematic zoom (40% slower):
-    // maxZoomRate: 0.15 zoom factor units per second
-    // maxPanRate: 8.4% origin shift per second
+    // Dynamic agile zoom & pan:
     const maxZoomRate = 0.15;
     const maxPanRate = 8.4;
     const ease = 0.021;
     const spd = zoomSpeedModes[zoomSpeedIdx].mult;
 
-    const maxZoomStep = maxZoomRate * spd * dt;
+    const maxZoomStep = maxZoomRate * spd * 3.5 * dt;
     const zoomDiff = targetZoom - currentZoom;
-    const zoomStep = Math.sign(zoomDiff) * Math.min(Math.abs(zoomDiff) * (ease * spd * 60 * dt), maxZoomStep);
+    const zoomStep = Math.sign(zoomDiff) * Math.min(Math.abs(zoomDiff) * (ease * spd * 3.5 * 60 * dt), maxZoomStep);
     currentZoom += zoomStep;
 
-    const maxPanStep = maxPanRate * spd * dt;
+    const maxPanStep = maxPanRate * spd * 4.0 * dt;
     const panDiffX = targetOriginX - currentOriginX;
-    const panStepX = Math.sign(panDiffX) * Math.min(Math.abs(panDiffX) * (ease * spd * 60 * dt), maxPanStep);
+    const panStepX = Math.sign(panDiffX) * Math.min(Math.abs(panDiffX) * (ease * spd * 4.0 * 60 * dt), maxPanStep);
     currentOriginX += panStepX;
 
     const panDiffY = targetOriginY - currentOriginY;
-    const panStepY = Math.sign(panDiffY) * Math.min(Math.abs(panDiffY) * (ease * spd * 60 * dt), maxPanStep);
+    const panStepY = Math.sign(panDiffY) * Math.min(Math.abs(panDiffY) * (ease * spd * 4.0 * 60 * dt), maxPanStep);
     currentOriginY += panStepY;
 
     const vp = $("previewViewport");
@@ -224,6 +244,7 @@
 
   function frameLoop(){
     updateZoom();
+    drawTracking();
     requestAnimationFrame(frameLoop);
   }
   requestAnimationFrame(frameLoop);
@@ -232,7 +253,10 @@
     onStatus:m=>{
       camera=!!m.camera_running;
       if(m.frame_width){lastFrameW=m.frame_width;lastFrameH=m.frame_height||lastFrameH;}
-      if(m.detected) detection=m, lastDetectionAt=Date.now(); else if(Date.now()-lastDetectionAt>1400) detection=null;
+      if(m.detected){
+        detection = Object.assign({}, detection || {}, m);
+        lastDetectionAt = Date.now();
+      } else if(Date.now()-lastDetectionAt>1400) detection=null;
       drawTracking();
       tracking=!!m.tracking;
       setCameraUI(m); setTrackingUI(m);
@@ -244,10 +268,11 @@
         $("confidence").textContent=Math.round((m.confidence||0)*100)+"%";
         $("ballHud").className="hud-pill good";
       }else{
-        $("ballHud").textContent="BALL: NOT DETECTED";
+        $("ballHud").textContent=tracking ? "BALL: SEARCHING" : "BALL: NOT DETECTED";
         $("confidence").textContent="—";
         $("ballHud").className="hud-pill warn";
       }
+      if(m.message) show(m.message);
       if(m.frame_width) $("resolution").textContent=`${m.frame_width}×${m.frame_height}`;
     },
     onDetection:m=>{
@@ -255,6 +280,7 @@
       if(m.frame_width){lastFrameW=m.frame_width;lastFrameH=m.frame_height||lastFrameH;}
       $("ballHud").textContent=`BALL: ${Math.round((m.confidence||0)*100)}% • X ${m.x} Y ${m.y}`;
       $("confidence").textContent=Math.round((m.confidence||0)*100)+"%";
+      $("ballHud").className="hud-pill good";
       drawTracking();
     },
     onZoom:m=>{
@@ -268,31 +294,122 @@
   function show(t,err=false){$("message").textContent=t;$("message").style.color=err?"var(--red)":"var(--muted)";}
 
   function drawTracking(){
-    const box=tc.getBoundingClientRect();
-    const d=devicePixelRatio||1; tc.width=Math.max(1,Math.round(box.width*d)); tc.height=Math.max(1,Math.round(box.height*d));
-    tctx.setTransform(d,0,0,d,0,0); tctx.clearRect(0,0,box.width,box.height);
-    if(!detection || !lastFrameW || !lastFrameH || Date.now()-lastDetectionAt>700) return;
-    const scale=Math.min(box.width/lastFrameW,box.height/lastFrameH);
-    const ox=(box.width-lastFrameW*scale)/2, oy=(box.height-lastFrameH*scale)/2;
-    const b=detection.box || [detection.x-10,detection.y-10,detection.x+10,detection.y+10];
-    const x=ox+b[0]*scale,y=oy+b[1]*scale,w=(b[2]-b[0])*scale,h=(b[3]-b[1])*scale;
-    tctx.strokeStyle="#22c55e"; tctx.lineWidth=3; tctx.strokeRect(x,y,w,h);
-    const cx=ox+detection.x*scale,cy=oy+detection.y*scale;
-    tctx.beginPath(); tctx.arc(cx,cy,6,0,Math.PI*2); tctx.fillStyle="#ef4444"; tctx.fill();
-    tctx.strokeStyle="#fff"; tctx.lineWidth=2; tctx.beginPath(); tctx.moveTo(cx-16,cy); tctx.lineTo(cx+16,cy); tctx.moveTo(cx,cy-16); tctx.lineTo(cx,cy+16); tctx.stroke();
+    const cw = tc.clientWidth || tc.offsetWidth || 640;
+    const ch = tc.clientHeight || tc.offsetHeight || 360;
+    const d = window.devicePixelRatio || 1;
+    const targetW = Math.max(1, Math.round(cw * d));
+    const targetH = Math.max(1, Math.round(ch * d));
+    if(tc.width !== targetW || tc.height !== targetH){
+      tc.width = targetW;
+      tc.height = targetH;
+    }
+    tctx.setTransform(d,0,0,d,0,0);
+    tctx.clearRect(0,0,cw,ch);
+
+    const frameW = lastFrameW || $("cameraFrame").naturalWidth || 1280;
+    const frameH = lastFrameH || $("cameraFrame").naturalHeight || 720;
+    if(!detection || Date.now()-lastDetectionAt>1500) return;
+
+    const scale=Math.min(cw/frameW,ch/frameH);
+    const ox=(cw-frameW*scale)/2, oy=(ch-frameH*scale)/2;
+    const b=detection.box || [detection.x-16,detection.y-16,detection.x+16,detection.y+16];
+    const bx1=ox+b[0]*scale, by1=oy+b[1]*scale;
+    const bw=Math.max(20,(b[2]-b[0])*scale), bh=Math.max(20,(b[3]-b[1])*scale);
+
+    tctx.save();
+    // High-contrast outer stroke
+    tctx.strokeStyle="rgba(0,0,0,0.75)";
+    tctx.lineWidth=5;
+    tctx.strokeRect(bx1-1,by1-1,bw+2,bh+2);
+
+    // Glowing green tracking rectangle
+    tctx.strokeStyle="#00ff88";
+    tctx.lineWidth=3;
+    tctx.strokeRect(bx1,by1,bw,bh);
+
+    // Sports broadcast corner brackets
+    const cl=Math.max(6,Math.min(14,Math.min(bw,bh)*0.3));
+    tctx.strokeStyle="#00ff88";
+    tctx.lineWidth=4;
+    tctx.beginPath();
+    tctx.moveTo(bx1,by1+cl); tctx.lineTo(bx1,by1); tctx.lineTo(bx1+cl,by1);
+    tctx.moveTo(bx1+bw-cl,by1); tctx.lineTo(bx1+bw,by1); tctx.lineTo(bx1+bw,by1+cl);
+    tctx.moveTo(bx1,by1+bh-cl); tctx.lineTo(bx1,by1+bh); tctx.lineTo(bx1+cl,by1+bh);
+    tctx.moveTo(bx1+bw-cl,by1+bh); tctx.lineTo(bx1+bw,by1+bh); tctx.lineTo(bx1+bw,by1+bh-cl);
+    tctx.stroke();
+
+    // High-visibility label tag
+    const confVal=Math.round((detection.confidence||0)*100);
+    const pct=confVal>0?`🏏 BALL ${confVal}%`:"🏏 BALL";
+    tctx.font="bold 12px Inter,sans-serif";
+    const tw=tctx.measureText(pct).width;
+    const tagY=Math.max(18,by1-6);
+    tctx.fillStyle="rgba(0,0,0,0.85)";
+    tctx.fillRect(bx1,tagY-14,tw+10,18);
+    tctx.fillStyle="#00ff88";
+    tctx.fillText(pct,bx1+5,tagY-1);
+
+    // Center crosshair & point
+    const cx=ox+detection.x*scale, cy=oy+detection.y*scale;
+    tctx.beginPath();
+    tctx.arc(cx,cy,4,0,Math.PI*2);
+    tctx.fillStyle="#ef4444";
+    tctx.fill();
+
+    tctx.strokeStyle="#ffffff";
+    tctx.lineWidth=2;
+    tctx.beginPath();
+    tctx.moveTo(cx-10,cy); tctx.lineTo(cx+10,cy);
+    tctx.moveTo(cx,cy-10); tctx.lineTo(cx,cy+10);
+    tctx.stroke();
+    tctx.restore();
   }
-  window.addEventListener("resize",drawTracking); setInterval(drawTracking,100);
+  window.addEventListener("resize",drawTracking);
 
   function setCameraUI(m){
     const running=!!m.camera_running, connected=m.camera==="CONNECTED";
-    $("camStatus").textContent=connected?"CONNECTED":running?"STARTING":"STOPPED";
-    $("camHud").textContent=connected?"CAMERA: LIVE":running?"CAMERA: STARTING":"CAMERA: STOPPED";
-    $("camHud").className="hud-pill "+(connected?"good":"");
+    const camErr = m.camera_error || "";
+    if(connected){
+      $("camStatus").textContent = "CONNECTED";
+      $("camHud").textContent = "CAMERA: LIVE";
+      $("camHud").className = "hud-pill good";
+    } else if(running){
+      if(m.camera === "OFFLINE" && camErr){
+        $("camStatus").textContent = "OFFLINE (" + (camErr.length > 25 ? camErr.slice(0, 25) + "…" : camErr) + ")";
+        $("camHud").textContent = "CAMERA: NO SIGNAL";
+        $("camHud").className = "hud-pill warn";
+      } else {
+        $("camStatus").textContent = "STARTING";
+        $("camHud").textContent = "CAMERA: STARTING";
+        $("camHud").className = "hud-pill";
+      }
+    } else {
+      $("camStatus").textContent = "STOPPED";
+      $("camHud").textContent = "CAMERA: STOPPED";
+      $("camHud").className = "hud-pill";
+    }
     $("cameraBtn").textContent=running?"⏹ Stop Camera":"▶ Start Camera";
     $("cameraBtn").className=running?"btn big-control running":"btn primary big-control";
     $("trackingBtn").disabled=!running && !tracking;
-    if(running && connected && !frameStarted){ $("cameraFrame").src="/api/camera/mjpeg"; frameStarted=true; $("empty").style.display="none"; }
-    if(!running){ $("cameraFrame").removeAttribute("src"); frameStarted=false; $("empty").style.display=""; }
+
+    const emptyMain = $("emptyMain") || $("empty");
+    const emptySub = $("emptySub");
+    if(running && !frameStarted){
+      $("cameraFrame").src="/api/camera/mjpeg";
+      frameStarted=true;
+      $("empty").style.display="none";
+    }
+    if(!running){
+      $("cameraFrame").removeAttribute("src");
+      frameStarted=false;
+      $("empty").style.display="";
+      if(emptyMain) emptyMain.innerHTML = "Press <b>Start Camera</b> to see the live picture.";
+      if(emptySub) emptySub.textContent = "Connect a webcam, or configure an Android Phone camera / RTSP stream in Setup Camera.";
+    } else if(!connected && !frameStarted){
+      $("empty").style.display="";
+      if(emptyMain) emptyMain.innerHTML = `<span style="color:var(--orange)">⚠️ Camera starting or offline</span>`;
+      if(emptySub) emptySub.innerHTML = camErr ? CL.esc(camErr) + ` — <a href="settings.html" style="color:#0284c7;text-decoration:underline">Open Settings</a>` : "Connecting to video source…";
+    }
   }
 
   function setTrackingUI(m){
@@ -308,6 +425,19 @@
     try{
       if(camera){await CL.api("/api/camera/stop",{method:"POST"});show("Camera stopping…")} else {await CL.api("/api/camera/start",{method:"POST"});show("Camera starting…")}
     }catch(e){show(e.message,true)}
+  };
+
+  $("setPitchHomeBtn").onclick=()=>{
+    ws.send("set_pitch_home");
+    targetZoom = 1.0; targetOriginX = 50; targetOriginY = 50;
+    show("📍 Cricket pitch home position calibrated!");
+    CL.toast("📍 Pitch home position set");
+  };
+
+  $("returnPitchHomeBtn").onclick=()=>{
+    ws.send("return_pitch_home");
+    targetZoom = 1.0; targetOriginX = 50; targetOriginY = 50;
+    show("🏠 Returning camera to cricket pitch…");
   };
 
   $("restartCamBtn").onclick=async()=>{

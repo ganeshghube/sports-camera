@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Cricket Live — Plug-and-Play Android Launcher with Hotspot Detection & QR Code
+# Cricket Live — Plug-and-Play Android (Fedora / UserLAnd) Launcher
 # ==============================================================================
 set -e
 
@@ -9,33 +9,14 @@ cd "${ROOT_DIR}"
 
 export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-8000}"
-
-# 0. Automatic First-Time Install & Deploy Check
-# If required packages or ffmpeg are missing, run setup_android.sh; otherwise start immediately
-USE_PROOT=0
-if command -v proot-distro >/dev/null 2>&1 && [ -d "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/ubuntu" ] && [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
-  USE_PROOT=1
-fi
+export ANDROID_DATA="${ANDROID_DATA:-/data}"
 
 REQ_CHECK="import fastapi, uvicorn, httpx, dotenv, psutil, websocket, cv2, numpy, ultralytics, serial"
 
-if [ "$USE_PROOT" -eq 1 ]; then
-  if ! proot-distro login ubuntu --shared-tmp --bind "${ROOT_DIR}:${ROOT_DIR}" -- "${ROOT_DIR}/.venv-android/bin/python" -c "${REQ_CHECK}" >/dev/null 2>&1; then
-    echo "===================================================================="
-    echo "🚀 Missing dependencies detected! Auto-installing..."
-    echo "===================================================================="
-    bash tools/setup_android.sh
-  fi
-elif [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
-  if ! "${ROOT_DIR}/.venv-android/bin/python" -c "${REQ_CHECK}" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
-    echo "===================================================================="
-    echo "🚀 Missing dependencies detected! Auto-installing..."
-    echo "===================================================================="
-    bash tools/setup_android.sh
-  fi
-elif ! python3 -c "${REQ_CHECK}" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
+# 0. Start immediately if dependencies exist; otherwise run setup_android.sh
+if [ ! -x "${ROOT_DIR}/.venv-android/bin/python" ] || ! "${ROOT_DIR}/.venv-android/bin/python" -c "${REQ_CHECK}" >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
   echo "===================================================================="
-  echo "🚀 First-time run or missing dependencies detected! Auto-installing..."
+  echo "🚀 Missing dependencies detected! Auto-installing for Fedora..."
   echo "===================================================================="
   bash tools/setup_android.sh
 fi
@@ -48,21 +29,9 @@ if [ ! -f ".env" ]; then
   grep -q "SERIAL_PORT=" .env 2>/dev/null && sed -i 's|^SERIAL_PORT=.*|SERIAL_PORT=/dev/ttyUSB0|' .env || echo "SERIAL_PORT=/dev/ttyUSB0" >> .env
 fi
 
-if command -v proot-distro >/dev/null 2>&1 && [ -d "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/ubuntu" ] && [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
-  USE_PROOT=1
-fi
-
-# Keep Termux CPU awake while running live match server & AI tracker
-if command -v termux-wake-lock >/dev/null 2>&1; then
-  termux-wake-lock >/dev/null 2>&1 || true
-fi
-
-# 1. Inspect all network interfaces for Hotspot or Wi-Fi
+# 1. Inspect network interfaces for Hotspot or Wi-Fi
 HOTSPOT_IP=""
 WIFI_IP=""
-OTHER_IPS=()
-
-# Extract all IPv4 addresses excluding loopback (127.0.0.1)
 ADDR_LINES=$(ip -4 -o addr show 2>/dev/null | awk '{print $2 "|" $4}' | grep -v '^lo ' || true)
 for item in $ADDR_LINES; do
   [ -z "$item" ] && continue
@@ -70,31 +39,21 @@ for item in $ADDR_LINES; do
   IP_CIDR="${item##*|}"
   IP_ADDR="${IP_CIDR%%/*}"
 
-  # Check if this is an Android Hotspot / Tethering interface
   if [[ "$IFACE" =~ ^(ap0|wlan1|swlan0|softap0)$ ]] || [[ "$IP_ADDR" =~ ^192\.168\.(43|49)\. ]]; then
     HOTSPOT_IP="$IP_ADDR"
   elif [[ "$IFACE" =~ ^(wlan0)$ ]]; then
     WIFI_IP="$IP_ADDR"
-  else
-    OTHER_IPS+=("$IP_ADDR")
   fi
 done
 
-# 2. If Hotspot is not yet active, offer to open Android Hotspot Settings
 if [ -z "${HOTSPOT_IP}" ]; then
-  if command -v am >/dev/null 2>&1; then
-    echo "💡 [Tip] Turn on your phone's 'Mobile Hotspot' so anyone nearby can connect!"
-    # Non-blocking attempt to open Hotspot settings screen on phone
-    am start -a android.settings.TETHER_SETTINGS >/dev/null 2>&1 || true
-  fi
-  # Standard Android default hotspot gateway is 192.168.43.1
   HOTSPOT_IP="192.168.43.1 (default when enabled)"
 fi
 
 PRIMARY_EXTERNAL_IP="${WIFI_IP:-${HOTSPOT_IP%% *}}"
 
 echo "===================================================================="
-echo "🏏 CRICKET LIVE — ANDROID MOBILE HOTSPOT & CONSOLE"
+echo "🏏 CRICKET LIVE — ANDROID FEDORA CONSOLE"
 echo "===================================================================="
 echo "📱 PHONE LOCAL ACCESS:"
 echo "   http://127.0.0.1:${PORT}"
@@ -107,18 +66,17 @@ echo "   • Live Score Overlay:http://${HOTSPOT_IP}:${PORT}/index.html?overlay=
 
 if [ -n "${WIFI_IP}" ]; then
   echo
-  echo "🌐 HOME/GROUND WI-FI (If phone is connected to existing router):"
+  echo "🌐 HOME/GROUND WI-FI:"
   echo "   http://${WIFI_IP}:${PORT}"
 fi
 
 echo "===================================================================="
 echo "• Camera Source:    Phone Camera (http://127.0.0.1:8080/video)"
-echo "• Motor Interface:  ESP32 Serial (USB-OTG / Bluetooth auto-scan)"
 echo "• AI Features:      Auto-Zoom, Auto-Track, Continuous Learning"
 echo "===================================================================="
 echo
 
-# 3. Print QR code in terminal if qrencode is available
+# 2. Print QR code in terminal if qrencode is available
 QR_TARGET_URL="http://${PRIMARY_EXTERNAL_IP}:${PORT}"
 if command -v qrencode >/dev/null 2>&1; then
   echo "📱 SCAN TO CONNECT (Point any phone camera at this QR code):"
@@ -126,16 +84,4 @@ if command -v qrencode >/dev/null 2>&1; then
   echo
 fi
 
-# 4. If termux-open-url is available, open local preview after a short delay
-if command -v termux-open-url >/dev/null 2>&1; then
-  (sleep 2.5 && termux-open-url "http://127.0.0.1:${PORT}/preview.html") &
-fi
-
-if [ "$USE_PROOT" -eq 1 ]; then
-  exec proot-distro login ubuntu --shared-tmp --bind "${ROOT_DIR}:${ROOT_DIR}" -- bash -c "cd '${ROOT_DIR}' && export HOST='${HOST}' PORT='${PORT}' TERMUX_VERSION='proot' && exec '${ROOT_DIR}/.venv-android/bin/python' run.py"
-elif [ -x "${ROOT_DIR}/.venv-android/bin/python" ]; then
-  export TERMUX_VERSION="${TERMUX_VERSION:-userland}"
-  exec "${ROOT_DIR}/.venv-android/bin/python" run.py
-else
-  exec python3 run.py
-fi
+exec "${ROOT_DIR}/.venv-android/bin/python" run.py

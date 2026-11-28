@@ -4,14 +4,24 @@ set -e
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${ROOT_DIR}"
 
+REQ_CHECK="import fastapi, uvicorn, httpx, dotenv, playwright, psutil, websocket, cv2, numpy, ultralytics, serial"
+
 VENV_PY=""
-if [ -f ".venv/Scripts/python.exe" ]; then
-  VENV_PY=".venv/Scripts/python.exe"
-elif [ -f ".venv/bin/python" ]; then
-  VENV_PY=".venv/bin/python"
+if [ -n "${VIRTUAL_ENV:-}" ]; then
+  if [ -f "${VIRTUAL_ENV}/Scripts/python.exe" ] && "${VIRTUAL_ENV}/Scripts/python.exe" -c "${REQ_CHECK}" >/dev/null 2>&1; then
+    VENV_PY="${VIRTUAL_ENV}/Scripts/python.exe"
+  elif [ -f "${VIRTUAL_ENV}/bin/python" ] && "${VIRTUAL_ENV}/bin/python" -c "${REQ_CHECK}" >/dev/null 2>&1; then
+    VENV_PY="${VIRTUAL_ENV}/bin/python"
+  fi
 fi
 
-REQ_CHECK="import fastapi, uvicorn, httpx, dotenv, playwright, psutil, websocket, cv2, numpy, ultralytics, serial"
+if [ -z "${VENV_PY}" ]; then
+  if [ -f ".venv/Scripts/python.exe" ]; then
+    VENV_PY=".venv/Scripts/python.exe"
+  elif [ -f ".venv/bin/python" ]; then
+    VENV_PY=".venv/bin/python"
+  fi
+fi
 
 if [ -z "${VENV_PY}" ] || ! "${VENV_PY}" -c "${REQ_CHECK}" >/dev/null 2>&1; then
   echo "===================================================================="

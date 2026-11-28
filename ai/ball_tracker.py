@@ -55,8 +55,9 @@ def runtime_config():
     cfg.setdefault("ai_device", DEVICE)
     cfg.setdefault("model_path", MODEL_PATH)
     cfg.setdefault("auto_camera_track", True)
-    cfg.setdefault("min_track_confidence", 0.35)
-    cfg.setdefault("ai_max_fps", 20)
+    cfg.setdefault("min_track_confidence", 0.25)
+    cfg.setdefault("ai_max_fps", 30)
+    cfg.setdefault("input_size", 384)
     cfg.setdefault("motor_driver", MOTOR_DRIVER)
     cfg.setdefault("pan_step_pin", PAN_STEP_PIN)
     cfg.setdefault("pan_dir_pin", PAN_DIR_PIN)
@@ -69,12 +70,12 @@ def runtime_config():
 RTSP_URL = _env("RTSP_URL", "rtsp://192.168.1.219:8080/h264.sdp")
 MODEL_PATH = _env("MODEL_PATH", "models/best.pt")
 DEVICE = _env("DEVICE", "AUTO").upper()            # AUTO | GPU | CPU
-CONFIDENCE = _env("CONFIDENCE", 0.25, float)
-INPUT_SIZE = _env("INPUT_SIZE", 640, int)          # detection resolution
+CONFIDENCE = _env("CONFIDENCE", 0.15, float)
+INPUT_SIZE = _env("INPUT_SIZE", 256, int)          # detection resolution (256 = 25+ FPS real-time CPU inference)
 BALL_CLASS_ID = _env("BALL_CLASS_ID", 0, int)
 INFERENCE_EVERY_N_FRAMES = _env("INFERENCE_EVERY_N_FRAMES", 1, int)
-AI_MAX_FPS = _env("AI_MAX_FPS", 20, int)
-MIN_TRACK_CONFIDENCE = _env("MIN_TRACK_CONFIDENCE", 0.35, float)
+AI_MAX_FPS = _env("AI_MAX_FPS", 30, int)
+MIN_TRACK_CONFIDENCE = _env("MIN_TRACK_CONFIDENCE", 0.18, float)
 AUTO_CAMERA_TRACK = _env("AUTO_CAMERA_TRACK", True, bool)
 DIGITAL_ZOOM = _env("DIGITAL_ZOOM", 1.0, float)    # 1.0 = no zoom, 2.0 = 2x zoom
 
@@ -96,7 +97,7 @@ TILT_GAIN = _env("TILT_GAIN", 110, int)
 CONTROL_INTERVAL = _env("CONTROL_INTERVAL", 0.03, float)
 PAN_REVERSE = _env("PAN_REVERSE", False, bool)
 TILT_REVERSE = _env("TILT_REVERSE", True, bool)
-TRACK_SMOOTHING = _env("TRACK_SMOOTHING", 0.35, float)
+TRACK_SMOOTHING = _env("TRACK_SMOOTHING", 0.70, float)
 PREDICTION_SECONDS = _env("PREDICTION_SECONDS", 0.06, float)
 MAX_PREDICTION_PX = _env("MAX_PREDICTION_PX", 220, float)
 
@@ -112,7 +113,7 @@ GPIO_MAX_PAN_SPS = _env("GPIO_MAX_PAN_SPS", 700, int)
 GPIO_MAX_TILT_SPS = _env("GPIO_MAX_TILT_SPS", 550, int)
 
 BACKEND_WS_URL = _env("BACKEND_WS_URL", "ws://127.0.0.1:8000/ws/ball-tracking")
-PUBLISH_INTERVAL = _env("PUBLISH_INTERVAL", 0.05, float)  # up to 20 ball_detection updates/sec
+PUBLISH_INTERVAL = _env("PUBLISH_INTERVAL", 0.02, float)  # up to 50 ball_detection updates/sec
 
 # Live preview frames for the web UI (reuses the already-decoded frame)
 PREVIEW_STREAM = _env("PREVIEW_STREAM", True, bool)
@@ -133,6 +134,11 @@ class PanTiltController:
         self.last_command_time = 0
         self.last_pan = 0
         self.last_tilt = 0
+        self.pos_pan = 0.0
+        self.pos_tilt = 0.0
+        self.home_pan = 0.0
+        self.home_tilt = 0.0
+        self.at_home = True
         if not enabled:
             log("Serial control disabled")
             return
@@ -160,6 +166,13 @@ class PanTiltController:
 
     def send(self, pan, tilt):
         now = time.perf_counter()
+        dt = now - self.last_command_time if self.last_command_time else 0.0
+        if 0 < dt < 1.0:
+            self.pos_pan += self.last_pan * dt
+            self.pos_tilt += self.last_tilt * dt
+            if abs(self.pos_pan) > 2.0 or abs(self.pos_tilt) > 2.0:
+                self.at_home = False
+
         if now - self.last_command_time < CONTROL_INTERVAL:
             return
         pan = int(max(-MAX_PAN_SPEED, min(MAX_PAN_SPEED, pan)))
@@ -172,6 +185,42 @@ class PanTiltController:
                 self.serial.write(f"PAN:{pan},TILT:{tilt}\n".encode("ascii"))
             except Exception as e:
                 log(f"Serial error: {e}")
+
+    def return_to_home(self):
+        now = time.perf_counter()
+        dt = now - self.last_command_time if self.last_command_time else 0.0
+        if 0 < dt < 1.0:
+            self.pos_pan += self.last_pan * dt
+            self.pos_tilt += self.last_tilt * dt
+
+        pan_err = self.pos_pan - self.home_pan
+        tilt_err = self.pos_tilt - self.home_tilt
+        if abs(pan_err) < 2.5 and abs(tilt_err) < 2.5:
+            if not self.at_home:
+                self.stop()
+                self.pos_pan = self.home_pan
+                self.pos_tilt = self.home_tilt
+                self.at_home = True
+            return True
+
+        self.at_home = False
+        ret_pan = -int(max(-MAX_PAN_SPEED, min(MAX_PAN_SPEED, pan_err * 2.5)))
+        ret_tilt = -int(max(-MAX_TILT_SPEED, min(MAX_TILT_SPEED, tilt_err * 2.5)))
+        self.send(ret_pan, ret_tilt)
+        return False
+
+    def set_home(self):
+        self.pos_pan = 0.0
+        self.pos_tilt = 0.0
+        self.home_pan = 0.0
+        self.home_tilt = 0.0
+        self.at_home = True
+        self.stop()
+        if self.serial is not None:
+            try:
+                self.serial.write(b"HOME:SET\n")
+            except Exception:
+                pass
 
     def stop(self):
         self.send(0, 0)
@@ -192,6 +241,7 @@ class Detector:
     def __init__(self):
         self.yolo_model = None
         self.device_used = None
+        self.predict_device = "cpu"
         self.error = None
         self.ov_version = None
 
@@ -208,10 +258,31 @@ class Detector:
             return False
 
         try:
-            log(f"Loading native PyTorch/Ultralytics model: {model_path}...")
+            import torch
+            has_cuda = torch.cuda.is_available()
+            has_xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
+
+            # Safely probe device capabilities for Ultralytics
+            self.predict_device = "cpu"
+            self.device_used = "CPU (PyTorch)"
+
+            if DEVICE in ("GPU", "AUTO"):
+                if has_cuda:
+                    self.predict_device = "0"
+                    self.device_used = "GPU (CUDA)"
+                elif has_xpu:
+                    try:
+                        from ultralytics.utils.torch_utils import select_device
+                        select_device("xpu:0", verbose=False)
+                        self.predict_device = "xpu:0"
+                        self.device_used = "GPU (Intel XPU)"
+                    except Exception:
+                        self.predict_device = "cpu"
+                        self.device_used = "CPU (PyTorch)"
+
+            log(f"Loading native PyTorch/Ultralytics model: {model_path} on {self.device_used}...")
             from ultralytics import YOLO
             self.yolo_model = YOLO(model_path)
-            self.device_used = "CPU (PyTorch)"
             self.ov_version = "PyTorch"
             log(f"Model loaded with Ultralytics on {self.device_used}")
             return True
@@ -221,30 +292,49 @@ class Detector:
             return False
 
     def detect(self, frame):
-        if self.yolo_model is not None:
-            try:
-                results = self.yolo_model.predict(
-                    frame, imgsz=INPUT_SIZE, conf=CONFIDENCE, verbose=False, device="cpu"
-                )
-                dets = []
-                if results and len(results) > 0:
-                    for b in results[0].boxes:
-                        conf = float(b.conf[0])
-                        x1, y1, x2, y2 = [int(v) for v in b.xyxy[0]]
-                        dets.append({"box": (x1, y1, x2, y2), "confidence": conf})
-                return dets
-            except Exception:
-                return []
-        return []
+        if self.yolo_model is None:
+            return []
+        try:
+            results = self.yolo_model.predict(
+                frame, imgsz=INPUT_SIZE, conf=CONFIDENCE, verbose=False, device=self.predict_device
+            )
+            dets = []
+            if results and len(results) > 0:
+                for b in results[0].boxes:
+                    conf = float(b.conf[0])
+                    x1, y1, x2, y2 = [int(v) for v in b.xyxy[0]]
+                    dets.append({"box": (x1, y1, x2, y2), "confidence": conf})
+            return dets
+        except Exception as exc:
+            if self.predict_device != "cpu":
+                log(f"⚠️ Predict failed on {self.predict_device} ({exc}); falling back to CPU")
+                self.predict_device = "cpu"
+                self.device_used = "CPU (PyTorch)"
+                try:
+                    results = self.yolo_model.predict(
+                        frame, imgsz=INPUT_SIZE, conf=CONFIDENCE, verbose=False, device="cpu"
+                    )
+                    dets = []
+                    if results and len(results) > 0:
+                        for b in results[0].boxes:
+                            conf = float(b.conf[0])
+                            x1, y1, x2, y2 = [int(v) for v in b.xyxy[0]]
+                            dets.append({"box": (x1, y1, x2, y2), "confidence": conf})
+                    return dets
+                except Exception as exc2:
+                    log(f"Predict error on CPU fallback: {exc2}")
+                    return []
+            log(f"Predict error: {exc}")
+            return []
 
 
-def select_best_ball(detections, frame_w=None, frame_h=None):
+def select_best_ball(detections, frame_w=None, frame_h=None, prev_x=None, prev_y=None):
     if not detections:
         return None
     candidates = detections
     if frame_w and frame_h:
-        max_w = frame_w * 0.12
-        max_h = frame_h * 0.15
+        max_w = frame_w * 0.35
+        max_h = frame_h * 0.35
         filtered = []
         for d in detections:
             x1, y1, x2, y2 = d["box"]
@@ -252,12 +342,22 @@ def select_best_ball(detections, frame_w=None, frame_h=None):
             if bw <= 1 or bh <= 1:
                 continue
             ratio = bw / bh
-            if bw <= max_w and bh <= max_h and 0.35 <= ratio <= 2.8:
+            if bw <= max_w and bh <= max_h and 0.40 <= ratio <= 2.5:
                 filtered.append(d)
-        candidates = filtered
+        if filtered:
+            candidates = filtered
     if not candidates:
         return None
-    best = max(candidates, key=lambda x: x["confidence"])
+    if prev_x is not None and prev_y is not None:
+        def score(d):
+            cx = (d["box"][0] + d["box"][2]) / 2.0
+            cy = (d["box"][1] + d["box"][3]) / 2.0
+            dist = ((cx - prev_x) ** 2 + (cy - prev_y) ** 2) ** 0.5
+            dist_penalty = min(1.0, dist / max(frame_w or 640, 1))
+            return d["confidence"] * 1.5 - dist_penalty * 0.8
+        best = max(candidates, key=score)
+    else:
+        best = max(candidates, key=lambda x: x["confidence"])
     x1, y1, x2, y2 = best["box"]
     return {"x": (x1 + x2) / 2.0, "y": (y1 + y2) / 2.0,
             "confidence": best["confidence"], "box": best["box"]}
@@ -289,18 +389,26 @@ class BallTracker:
         if self.filtered_x is None:
             fx, fy = x, y
         else:
-            a = max(0.05, min(0.95, TRACK_SMOOTHING))
+            dist = ((x - self.filtered_x) ** 2 + (y - self.filtered_y) ** 2) ** 0.5
+            # Adaptive smoothing: snap immediately (alpha 0.90) when ball moves fast,
+            # smooth camera micro-jitter (alpha 0.65) when ball is hovering/stationary.
+            if dist > 20.0:
+                a = 0.90
+            else:
+                a = max(0.45, min(0.95, TRACK_SMOOTHING))
             fx = self.filtered_x + a * (x - self.filtered_x)
             fy = self.filtered_y + a * (y - self.filtered_y)
+
         if self.previous_x is not None and self.previous_time is not None:
             dt = now - self.previous_time
             if dt > 0.001:
-                vx = (fx - self.filtered_x if self.filtered_x is not None else 0.0) / dt
-                vy = (fy - self.filtered_y if self.filtered_y is not None else 0.0) / dt
-                self.velocity_x = 0.55 * self.velocity_x + 0.45 * vx
-                self.velocity_y = 0.55 * self.velocity_y + 0.45 * vy
+                # Real physical velocity based on detection delta
+                raw_vx = (x - self.previous_x) / dt
+                raw_vy = (y - self.previous_y) / dt
+                self.velocity_x = 0.35 * self.velocity_x + 0.65 * raw_vx
+                self.velocity_y = 0.35 * self.velocity_y + 0.65 * raw_vy
         self.filtered_x, self.filtered_y = fx, fy
-        self.previous_x, self.previous_y, self.previous_time = fx, fy, now
+        self.previous_x, self.previous_y, self.previous_time = x, y, now
         self.last_seen = 0
         return {**ball, "x": fx, "y": fy}
 
@@ -452,8 +560,8 @@ class CameraReader:
                 modes.append(mode)
         backends = [
             ("DirectShow", getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY)),
-            ("Media Foundation", getattr(cv2, "CAP_MSMF", cv2.CAP_ANY)),
             ("OpenCV default", cv2.CAP_ANY),
+            ("Media Foundation", getattr(cv2, "CAP_MSMF", cv2.CAP_ANY)),
         ]
 
         for idx in indices:
@@ -466,17 +574,18 @@ class CameraReader:
                         continue
                     try:
                         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        if backend_name == "DirectShow":
+                            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
                     except Exception:
                         pass
                     for w, h, fps in modes:
                         try:
                             cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
                             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
-                            # Do not force 60fps unless the camera proves it can stream.
                             cap.set(cv2.CAP_PROP_FPS, fps)
                         except Exception:
                             pass
-                        if self._read_test_frames(cap, count=4, timeout=2.0):
+                        if self._read_test_frames(cap, count=3, timeout=1.5):
                             actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
                             actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
                             actual_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
@@ -574,7 +683,11 @@ class CameraReader:
                     target = None
 
             if os.name == "nt" and ctype == "usb":
-                return self._open_windows_usb(target, cfg)
+                opened_cap = self._open_windows_usb(target, cfg)
+                if opened_cap is not None:
+                    return opened_cap
+                self.error = "No physical USB camera detected on Windows. Connect a webcam or switch Camera Type in Settings."
+                return None
 
             backend = cv2.CAP_V4L2 if os.name != "nt" else cv2.CAP_DSHOW
             log(f"Opening {ctype} camera: {target if target is not None else 'auto'}")
@@ -662,7 +775,8 @@ class CameraReader:
                 self.cap = self._open()
                 if self.cap is None:
                     self.connected = False
-                    self.error = "Camera connection failed"
+                    if not self.error:
+                        self.error = "Camera connection failed"
                     time.sleep(1.5)
                     continue
                 # Do not claim the camera is online until the read loop gets a real frame.
@@ -970,17 +1084,20 @@ def main():
         elif cmd == "start_tracking":
             cfg = runtime_config()
             desired_device = str(cfg.get("ai_device") or DEVICE).upper()
-            if desired_device != DEVICE:
+            if desired_device != DEVICE or not detector.ready:
                 DEVICE = desired_device
                 detector.load(cfg.get("model_path") or MODEL_PATH)
             if not detector.ready:
                 log(f"Cannot start tracking: {detector.error or 'AI model not ready'}")
                 state["tracking"] = False
+                pub.publish({"type": "status", "tracking": False, "model_error": detector.error or "AI model not ready"})
                 return
             state["camera"] = True
             state["tracking"] = True
             ensure_camera()
             tracker.reset()
+            log("🎯 Ball tracking started")
+            pub.publish(status_msg(camera, detector, state, inference_fps, cam_fps, 0, pub))
         elif cmd == "stop_tracking":
             state["tracking"] = False
             tracker.reset()
@@ -1000,6 +1117,17 @@ def main():
             state["auto_zoom"] = False
             pub.publish({"type": "status", "auto_zoom": False})
             log("Auto zoom disabled")
+        elif cmd == "set_pitch_home":
+            if hasattr(controller, "set_home"):
+                controller.set_home()
+            log("📍 Cricket pitch home position set and calibrated")
+            pub.publish({"type": "status", "message": "📍 Pitch home position calibrated"})
+        elif cmd == "return_pitch_home":
+            follow_engaged = False
+            if hasattr(controller, "return_to_home"):
+                controller.return_to_home()
+            log("🏠 Returning camera rotation to fixed cricket pitch")
+            pub.publish({"type": "status", "message": "🏠 Returning to cricket pitch"})
 
     pub = Publisher(BACKEND_WS_URL, on_command)
 
@@ -1149,7 +1277,7 @@ def main():
             else:
                 detections = []
 
-            ball = select_best_ball(detections, w, h)
+            ball = select_best_ball(detections, w, h, tracker.filtered_x, tracker.filtered_y)
             tracker.update(ball)
             if ball is not None:
                 last_detection_ts = time.time()
@@ -1172,7 +1300,7 @@ def main():
                         if out_of_pitch_since == 0.0:
                             out_of_pitch_since = now
                         # Stage 2: Shot detected when ball exits pitch with motion
-                        if (now - out_of_pitch_since) >= 0.35 and ball_speed >= max(15.0, w * 0.015):
+                        if (now - out_of_pitch_since) >= 0.15 and ball_speed >= max(12.0, w * 0.010):
                             follow_engaged = True
                             stationary_since = 0.0
                 else:
@@ -1193,14 +1321,20 @@ def main():
                     zoom = calculate_zoom(cx, cy, w, h)
                     pub.publish({"type": "zoom", "zoom_factor": zoom, "ball_x": cx, "ball_y": cy})
                 else:
-                    controller.stop()
+                    if hasattr(controller, "return_to_home"):
+                        controller.return_to_home()
+                    else:
+                        controller.stop()
                     zoom = 1.0
                     pub.publish({"type": "zoom", "zoom_factor": 1.0, "ball_x": None, "ball_y": None})
             else:
                 out_of_pitch_since = 0.0
                 stationary_since = 0.0
                 follow_engaged = False
-                controller.stop()
+                if hasattr(controller, "return_to_home"):
+                    controller.return_to_home()
+                else:
+                    controller.stop()
                 zoom = 1.0
                 pub.publish({"type": "zoom", "zoom_factor": 1.0, "ball_x": None, "ball_y": None})
 

@@ -589,7 +589,7 @@ async def ws_tracker_ui(ws: WebSocket):
                 tr.frame_uis.add(ws)
                 continue
             cmd = msg.get("command")
-            if cmd in ("start_tracking", "stop_tracking", "start_camera", "stop_camera", "restart_camera", "reload_model", "reload_config", "enable_auto_zoom", "disable_auto_zoom"):
+            if cmd in ("start_tracking", "stop_tracking", "start_camera", "stop_camera", "restart_camera", "reload_model", "reload_config", "enable_auto_zoom", "disable_auto_zoom", "set_pitch_home", "return_pitch_home"):
                 if not store.session_user(ws.cookies.get(COOKIE)):
                     await ws.send_json({"type": "error", "error": "Not authenticated"})
                     continue
