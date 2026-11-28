@@ -390,12 +390,11 @@ class BallTracker:
             fx, fy = x, y
         else:
             dist = ((x - self.filtered_x) ** 2 + (y - self.filtered_y) ** 2) ** 0.5
-            # Adaptive smoothing: snap immediately (alpha 0.90) when ball moves fast,
-            # smooth camera micro-jitter (alpha 0.65) when ball is hovering/stationary.
-            if dist > 20.0:
-                a = 0.90
+            # Real-time high-speed ball lock: snap 100% when ball is moving rapidly (150 km/h)
+            if dist > 8.0:
+                a = 0.98
             else:
-                a = max(0.45, min(0.95, TRACK_SMOOTHING))
+                a = max(0.60, min(0.98, TRACK_SMOOTHING))
             fx = self.filtered_x + a * (x - self.filtered_x)
             fy = self.filtered_y + a * (y - self.filtered_y)
 
@@ -405,12 +404,12 @@ class BallTracker:
                 # Real physical velocity based on detection delta
                 raw_vx = (x - self.previous_x) / dt
                 raw_vy = (y - self.previous_y) / dt
-                self.velocity_x = 0.35 * self.velocity_x + 0.65 * raw_vx
-                self.velocity_y = 0.35 * self.velocity_y + 0.65 * raw_vy
+                self.velocity_x = 0.20 * self.velocity_x + 0.80 * raw_vx
+                self.velocity_y = 0.20 * self.velocity_y + 0.80 * raw_vy
         self.filtered_x, self.filtered_y = fx, fy
         self.previous_x, self.previous_y, self.previous_time = x, y, now
         self.last_seen = 0
-        return {**ball, "x": fx, "y": fy}
+        return {**ball, "x": fx, "y": fy, "vx": round(self.velocity_x, 1), "vy": round(self.velocity_y, 1)}
 
     def predict(self, t=None):
         if self.filtered_x is None:
@@ -1348,6 +1347,7 @@ def main():
                     "type": "ball_detection", "timestamp": time.time(),
                     "detected": True, "confidence": round(ball["confidence"], 3),
                     "x": int(ball["x"]), "y": int(ball["y"]), "box": list(ball["box"]),
+                    "vx": ball.get("vx", 0.0), "vy": ball.get("vy", 0.0),
                     "frame_width": w, "frame_height": h, "fps": round(inference_fps, 1),
                     "motor_target_x": round(w * TARGET_X, 1), "motor_target_y": round(h * TARGET_Y, 1),
                     "zoom_factor": zoom, "shot_active": follow_engaged,

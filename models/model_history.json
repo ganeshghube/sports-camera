@@ -1,5 +1,12 @@
 [
   {
+    "timestamp": "2026-11-28 11:11:45",
+    "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795823458\\weights\\best.pt",
+    "mAP50": 0.8145,
+    "mAP50_95": 0.4815,
+    "total_frames": 1837
+  },
+  {
     "timestamp": "2026-11-28 11:05:42",
     "model_file": "C:\\00_Ganesh\\sports-camera\\runs\\detect\\cricket_train_1795823458\\weights\\best.pt",
     "mAP50": 0.8145,

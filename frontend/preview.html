@@ -312,7 +312,23 @@
 
     const scale=Math.min(cw/frameW,ch/frameH);
     const ox=(cw-frameW*scale)/2, oy=(ch-frameH*scale)/2;
-    const b=detection.box || [detection.x-16,detection.y-16,detection.x+16,detection.y+16];
+
+    // Extrapolate box position based on real physical velocity between inference frames
+    let bx = detection.x, by = detection.y;
+    const b = detection.box ? [...detection.box] : [bx-16, by-16, bx+16, by+16];
+    const bw_orig = b[2] - b[0], bh_orig = b[3] - b[1];
+    if(detection.vx || detection.vy){
+      const dtExtrap = Math.max(0, Math.min((Date.now() - lastDetectionAt) / 1000, 0.25));
+      const dxExtrap = (detection.vx || 0) * dtExtrap;
+      const dyExtrap = (detection.vy || 0) * dtExtrap;
+      bx += dxExtrap;
+      by += dyExtrap;
+      b[0] = bx - bw_orig / 2;
+      b[1] = by - bh_orig / 2;
+      b[2] = bx + bw_orig / 2;
+      b[3] = by + bh_orig / 2;
+    }
+
     const bx1=ox+b[0]*scale, by1=oy+b[1]*scale;
     const bw=Math.max(20,(b[2]-b[0])*scale), bh=Math.max(20,(b[3]-b[1])*scale);
 
@@ -350,7 +366,7 @@
     tctx.fillText(pct,bx1+5,tagY-1);
 
     // Center crosshair & point
-    const cx=ox+detection.x*scale, cy=oy+detection.y*scale;
+    const cx=ox+bx*scale, cy=oy+by*scale;
     tctx.beginPath();
     tctx.arc(cx,cy,4,0,Math.PI*2);
     tctx.fillStyle="#ef4444";
